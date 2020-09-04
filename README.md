@@ -8,7 +8,7 @@
 
 ![Example](figures/example.png)
 
-3D-RCAN a 3D version of deep residual channel attention network (RCAN) [[1]](#1). This model is useful for restoring and enhancing volumetric time-lapse (4D) fluorescence microscopy data.
+3D-RCAN is a 3D version of deep residual channel attention network (RCAN) [[1]](#1). This model is useful for restoring and enhancing volumetric time-lapse (4D) fluorescence microscopy data.
 
 ## System Requirements
 
@@ -19,7 +19,7 @@
 - NVIDIA GPU
 - CUDA 10.0 and cuDNN 7.6.5
 
-Tested Evironment:
+Tested Environment:
 
 - Windows 10
 - Python 3.7
@@ -40,7 +40,7 @@ Tested Evironment:
 ### (Option 2) Create a new virtual environment
 
 1. Download the `requirements.txt` from the repository
-2. Open command prompt and change directories to where you put the `requirements.txt`
+2. Open command prompt and change directory to where you put the `requirements.txt`
 3. Create a new virtual environment:
 
     `python -m venv RCAN3D`
@@ -99,7 +99,7 @@ Training data is an array of raw and GT image pairs and it must be specified in 
 
 The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` and `num_residual_groups`. In the example `config.json`, we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
 
-The loss values are saved in the training output folder. You can use tensorboard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
+The loss values are saved in the training output folder. You can use TensorBoard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
 
 `tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir`
 
@@ -125,7 +125,7 @@ You can turn on the “batch apply” mode by passing a directory path to the �
 
 When the input (specified by “-i”) is a directory, the output (“-o”) must be a directory too. The output directory is created by the script if it doesn’t exist yet.
 
-You can also specify a directory where ground truth images are located. The ground truth directory must contain the same number of images as the input dir.
+You can also specify a directory where ground truth images are located. The ground truth directory must contain the same number of images as the input directory.
 
 `python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir`
 
@@ -152,4 +152,4 @@ ECCV 2018
 
 ---
 Copyright 2020 DRVision Technologies LLC.
-SPDX-License-Identifier: CC-BY-NC-4.0
+Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License (https://creativecommons.org/licenses/by-nc/4.0/)

@@ -1,5 +1,5 @@
 # Copyright 2020 DRVision Technologies LLC.
-# SPDX-License-Identifier: CC-BY-NC-4.0
+# Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License (https://creativecommons.org/licenses/by-nc/4.0/)
 
 import fractions
 import itertools

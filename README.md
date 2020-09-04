@@ -26,6 +26,8 @@ Tested Environment:
 
 ## Dependencies Installation
 
+3D-RCAN itself does not require installation and the dependencies installation only takes few seconds on a typical PC.
+
 ### (Option 1) Install dependencies in base environment
 
 1. Download the `requirements.txt` from the repository
@@ -54,10 +56,9 @@ Tested Environment:
 
 ## Training
 
-We provide a sample dataset and a pretrained model for you to run the code, please download the files from the following link:
-[sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0)
+[Sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0): This link contains a sample dataset, a demo model trained on that dataset, and one expected output (32-bit) at the following link:
 
-To train the RCAN model, run:
+To train the RCAN model yourself, run:
 
 `python train.py -c config.json -o /path/to/training/output/dir`
 
@@ -91,7 +92,9 @@ Training data is an array of raw and GT image pairs and it must be specified in 
   - Channel reduction ratio for channel attention
   - Default: 8
 
-The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` and `num_residual_groups`. In the example `config.json`, we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
+The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` or `num_residual_groups`. In the example `config.json`, we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
+
+The expected runtime is 5-10 min/epoch using the example `config.json` under a PC similar to our tested environment.
 
 The loss values are saved in the training output folder. You can use TensorBoard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
 
@@ -141,4 +144,4 @@ ECCV 2018
 ## License
 
 - Copyright 2020 DRVision Technologies LLC.
-- [Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License](https://creativecommons.org/licenses/by-nc/4.0/) 
+- [Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License](https://creativecommons.org/licenses/by-nc/4.0/)

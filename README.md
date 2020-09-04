@@ -57,11 +57,15 @@ Tested Evironment:
 ## Training
 
 ---
+
+We provide a sample dataset and a pretrained model for you to run the code, please download the files at
+[here](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0).
+
 To train the RCAN model, run:
 
 `python train.py -c config.json -o /path/to/training/output/dir`
 
-Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the `config.json` in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
+Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the example `config.json` in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
 
 - validation_data (array of image pairs)
   - Validation data on which to evaluate the loss and metrics at the end of each epoch
@@ -91,7 +95,7 @@ Training data is an array of raw and GT image pairs and it must be specified in 
   - Channel reduction ratio for channel attention
   - Default: 8
 
-The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters.
+The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` and `num_residual_groups`. In the example `config.json`, we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
 
 The loss values are saved in the training output folder. You can use tensorboard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
 
@@ -104,6 +108,7 @@ The loss values are saved in the training output folder. You can use tensorboard
 We provide two ways to apply trained 3D-RCAN models
 
 ### (Option 1) Apply model to one image at a time
+
 To apply the trained model to an image, run:
 
 `python apply.py -m /path/to/training/output/dir -i input_raw_image.tif -o output.tif`
@@ -111,6 +116,7 @@ To apply the trained model to an image, run:
 The best model (i.e. the one with the lowest loss) will be selected from the model directory and applied. The output TIFF file is a two-channel ImageJ Hyperstack containing raw and restored images.
 
 ### (Option 2) Apply model to a folder of images
+
 You can turn on the “batch apply” mode by passing a directory path to the “-i” argument, e.g.:
 
 `python apply.py -m /path/to/training/output/dir -i /path/to/input/image/dir -o /path/to/output/image/dir`
@@ -129,8 +135,6 @@ Following two more arguments are available:
 - `-b` or `--bpp`
 
     Bit depth of the output image (either 8, 16, or 32). If not specified, it will be set to 32
-
-
 
 ## References
 

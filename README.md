@@ -30,7 +30,7 @@ Tested Environment:
 
 ### (Option 1) Install dependencies in base environment
 
-1. Download the `requirements.txt` from the repository
+1. Download the [`requirements.txt`](requirements.txt) from the repository
 2. In your command prompt run:
 
     ```posh
@@ -39,7 +39,7 @@ Tested Environment:
 
 ### (Option 2) Create a new virtual environment
 
-1. Download the `requirements.txt` from the repository
+1. Download the [`requirements.txt`](requirements.txt) from the repository
 2. Open command prompt and change directory to where you put the `requirements.txt`
 3. Create a new virtual environment:
 
@@ -76,7 +76,7 @@ To train the RCAN model yourself, run:
 python train.py -c config.json -o /path/to/training/output/dir
 ```
 
-Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the example `config.json` in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
+Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the example [`config.json`](config.json) in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
 
 - `validation_data` (array of image pairs)
   - Validation data on which to evaluate the loss and metrics at the end of each epoch
@@ -106,9 +106,9 @@ Training data is an array of raw and GT image pairs and it must be specified in 
   - Channel reduction ratio for channel attention
   - Default: 8
 
-The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` or `num_residual_groups`. In the example `config.json`, we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
+The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` or `num_residual_groups`. In the example [`config.json`](config.json), we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
 
-The expected runtime is 5-10 min/epoch using the example `config.json` under a PC similar to our tested environment.
+The expected runtime is 5-10 min/epoch using the example [`config.json`](config.json) under a PC similar to our tested environment.
 
 The loss values are saved in the training output folder. You can use TensorBoard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
 

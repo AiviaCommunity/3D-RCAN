@@ -33,7 +33,9 @@ Tested Environment:
 1. Download the `requirements.txt` from the repository
 2. In your command prompt run:
 
-    `pip install -r requirements.txt`
+    ```posh
+    pip install -r requirements.txt
+    ```
 
 ### (Option 2) Create a new virtual environment
 
@@ -41,18 +43,28 @@ Tested Environment:
 2. Open command prompt and change directory to where you put the `requirements.txt`
 3. Create a new virtual environment:
 
-    `python -m venv RCAN3D`
+    ```posh
+    python -m venv RCAN3D
+    ```
 
 4. Activate the virtual environment
 
-    On Windows: `.\RCAN3D\Scripts\activate`
-    On macOS and Linux: `source RCAN3D/bin/activate`
+    On Windows: 
+    ```posh
+    .\RCAN3D\Scripts\activate
+    ```
+    On macOS and Linux: 
+    ```bash
+    source RCAN3D/bin/activate
+    ```
 
 5. You should see (RCAN3D) in the command line.
 
 6. In your command prompt run:
 
-    `pip install -r requirements.txt`
+    ```posh
+    pip install -r requirements.txt
+    ```
 
 ## Training
 
@@ -60,35 +72,37 @@ Tested Environment:
 
 To train the RCAN model yourself, run:
 
-`python train.py -c config.json -o /path/to/training/output/dir`
+```posh
+python train.py -c config.json -o /path/to/training/output/dir
+```
 
 Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the example `config.json` in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
 
-- validation_data (array of image pairs)
+- `validation_data` (array of image pairs)
   - Validation data on which to evaluate the loss and metrics at the end of each epoch
   - Default: None
 
-- epochs (integer)
+- `epochs` (integer)
   - Number of epochs to train the model
   - Default: 300
 
-- steps_per_epoch (integer)
+- `steps_per_epoch` (integer)
   - Number of steps to perform back-propagation on mini-batches in each epoch
   - Default: 256
 
-- num_channels (integer)
+- `num_channels` (integer)
   - Number of feature channels in RCAN
   - Default: 32
 
-- num_residual_blocks (integer)
+- `num_residual_blocks` (integer)
   - Number of residual channel attention blocks in each residual group in RCAN
   - Default: 3
 
-- num_residual_groups (integer)
+- `num_residual_groups` (integer)
   - Number of residual groups in RCAN
   - Default: 5
 
-- channel_reduction (integer)
+- `channel_reduction` (integer)
   - Channel reduction ratio for channel attention
   - Default: 8
 
@@ -98,7 +112,9 @@ The expected runtime is 5-10 min/epoch using the example `config.json` under a P
 
 The loss values are saved in the training output folder. You can use TensorBoard to monitor the loss values. To use TensorBoard, run the following command and open [http://127.0.0.1:6006] in your browser.
 
-`tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir`
+```posh
+tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir
+```
 
 ## Model Apply
 
@@ -108,7 +124,9 @@ We provide two ways to apply trained 3D-RCAN models
 
 To apply the trained model to an image, run:
 
-`python apply.py -m /path/to/training/output/dir -i input_raw_image.tif -o output.tif`
+```posh
+python apply.py -m /path/to/training/output/dir -i input_raw_image.tif -o output.tif
+```
 
 The best model (i.e. the one with the lowest loss) will be selected from the model directory and applied. The output TIFF file is a two-channel ImageJ Hyperstack containing raw and restored images.
 
@@ -116,13 +134,17 @@ The best model (i.e. the one with the lowest loss) will be selected from the mod
 
 You can turn on the “batch apply” mode by passing a directory path to the “-i” argument, e.g.:
 
-`python apply.py -m /path/to/training/output/dir -i /path/to/input/image/dir -o /path/to/output/image/dir`
+```posh
+python apply.py -m /path/to/training/output/dir -i /path/to/input/image/dir -o /path/to/output/image/dir
+```
 
 When the input (specified by “-i”) is a directory, the output (“-o”) must be a directory too. The output directory is created by the script if it doesn’t exist yet.
 
 You can also specify a directory where ground truth images are located. The ground truth directory must contain the same number of images as the input directory.
 
-`python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir`
+```posh
+python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
+```
 
 Following two more arguments are available:
 

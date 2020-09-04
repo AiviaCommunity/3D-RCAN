@@ -1,0 +1,7 @@
+colorama; sys_platform=='win32'
+jsonschema
+keras==2.2.4
+numexpr
+tensorflow_gpu==1.13.1
+tifffile
+tqdm>=4.41.0

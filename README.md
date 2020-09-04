@@ -6,7 +6,9 @@
 
 [Three-dimensional residual channel attention networks denoise and sharpen fluorescence microscopy image volumes](https://www.biorxiv.org/content/10.1101/2020.08.27.270439v1).
 
-This is a 3D version of deep residual channel attention network (RCAN) [[1]](#1) for volumetric image denoising and sharpening.
+![Example](./figures/example.png)
+
+3D-RCAN a 3D version of deep residual channel attention network (RCAN) [[1]](#1). This model is useful for restoring and enhancing volumetric time-lapse (4D) fluorescence microscopy data.
 
 ## System Requirements
 

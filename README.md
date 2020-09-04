@@ -12,8 +12,6 @@
 
 ## System Requirements
 
----
-
 - Windows 10. Linux and Mac OS should be able to run the code but the code has been only tested on Windows 10 so far.
 - Python 3.6+
 - NVIDIA GPU
@@ -27,8 +25,6 @@ Tested Environment:
 - CUDA 10.0 and cuDNN 7.6.5
 
 ## Dependencies Installation
-
----
 
 ### (Option 1) Install dependencies in base environment
 
@@ -58,10 +54,8 @@ Tested Environment:
 
 ## Training
 
----
-
-We provide a sample dataset and a pretrained model for you to run the code, please download the files at
-[here](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0).
+We provide a sample dataset and a pretrained model for you to run the code, please download the files from the following link:
+[sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0)
 
 To train the RCAN model, run:
 
@@ -105,8 +99,6 @@ The loss values are saved in the training output folder. You can use TensorBoard
 
 ## Model Apply
 
----
-
 We provide two ways to apply trained 3D-RCAN models
 
 ### (Option 1) Apply model to one image at a time
@@ -140,8 +132,6 @@ Following two more arguments are available:
 
 ## References
 
----
-
 <a id="1">[1]</a>
 Yulun Zhang *et al.* (2018).
 Image Super-Resolution Using Very Deep
@@ -150,6 +140,5 @@ ECCV 2018
 
 ## License
 
----
 - Copyright 2020 DRVision Technologies LLC.
 - [Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License](https://creativecommons.org/licenses/by-nc/4.0/) 

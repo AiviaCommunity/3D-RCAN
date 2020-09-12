@@ -1,5 +1,6 @@
 # Copyright 2020 DRVision Technologies LLC.
-# Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License (https://creativecommons.org/licenses/by-nc/4.0/)
+# Creative Commons Attribution-NonCommercial 4.0 International Public License
+# (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
 from rcan.data_generator import DataGenerator
 from rcan.losses import mae
@@ -23,9 +24,40 @@ from tqdm.utils import IS_WIN
 tqdm = functools.partial(std_tqdm, dynamic_ncols=True, ascii=IS_WIN)
 
 
-def load_data(image_pair_list):
+def load_data(config, data_type):
+    image_pair_list = config.get(data_type + '_image_pairs', [])
+
+    if data_type + '_data_dir' in config:
+        raw_dir, gt_dir = [
+            pathlib.Path(config[data_type + '_data_dir'][t])
+            for t in ['raw', 'gt']]
+
+        raw_files, gt_files = [
+            sorted(d.glob('*.tif')) for d in [raw_dir, gt_dir]]
+
+        if not raw_files:
+            raise RuntimeError(f'No TIFF file found in {raw_dir}')
+
+        if len(raw_files) != len(gt_files):
+            raise RuntimeError(
+                f'"{raw_dir}" and "{gt_dir}" must contain the same number of '
+                'TIFF files')
+
+        for raw_file, gt_file in zip(raw_files, gt_files):
+            image_pair_list.append({'raw': str(raw_file), 'gt': str(gt_file)})
+
+    if not image_pair_list:
+        return None
+
+    print(f'Loading {data_type} data')
+
     data = []
-    for p in tqdm(image_pair_list):
+    for p in image_pair_list:
+        raw_file, gt_file = [p[t] for t in ['raw', 'gt']]
+
+        print('  - raw:', raw_file)
+        print('    gt:', gt_file)
+
         raw, gt = [tifffile.imread(p[t]) for t in ['raw', 'gt']]
 
         if raw.shape != gt.shape:
@@ -46,8 +78,10 @@ args = parser.parse_args()
 schema = {
     'type': 'object',
     'properties': {
-        'training_data': {'$ref': '#/definitions/image_pairs'},
-        'validation_data': {'$ref': '#/definitions/image_pairs'},
+        'training_image_pairs': {'$ref': '#/definitions/image_pairs'},
+        'validation_image_pairs': {'$ref': '#/definitions/image_pairs'},
+        'training_data_dir': {'$ref': '#/definitions/raw_gt_pair'},
+        'validation_data_dir': {'$ref': '#/definitions/raw_gt_pair'},
         'input_shape': {
             'type': 'array',
             'items': {'type': 'integer', 'minimum': 1},
@@ -62,17 +96,21 @@ schema = {
         'steps_per_epoch': {'type': 'integer', 'minimum': 1}
     },
     'additionalProperties': False,
-    'required': ['training_data'],
+    'anyOf': [
+        {'required': ['training_image_pairs']},
+        {'required': ['training_data_dir']}
+    ],
     'definitions': {
+        'raw_gt_pair': {
+            'type': 'object',
+            'properties': {
+                'raw': {'type': 'string'},
+                'gt': {'type': 'string'},
+            }
+        },
         'image_pairs': {
             'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {
-                    'raw': {'type': 'string'},
-                    'gt': {'type': 'string'},
-                }
-            },
+            'items': {'$ref': '#/definitions/raw_gt_pair'},
             'minItems': 1
         }
     }
@@ -89,14 +127,8 @@ config.setdefault('num_residual_blocks', 3)
 config.setdefault('num_residual_groups', 5)
 config.setdefault('channel_reduction', 8)
 
-print('Loading training data')
-training_data = load_data(config['training_data'])
-
-if 'validation_data' in config:
-    print('Loading validation data')
-    validation_data = load_data(config['validation_data'])
-else:
-    validation_data = None
+training_data = load_data(config, 'training')
+validation_data = load_data(config, 'validation')
 
 ndim = training_data[0][0].ndim
 

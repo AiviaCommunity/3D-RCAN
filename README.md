@@ -24,6 +24,10 @@ Tested Environment:
 - NVIDIA GTX 1060 6GB
 - CUDA 10.0 and cuDNN 7.6.5
 
+## Sample dataset
+
+[Sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0): This link contains a dataset, a demo model trained on that dataset, and one expected output (32-bit)
+
 ## Dependencies Installation
 
 3D-RCAN itself does not require installation and the dependencies installation only takes few seconds on a typical PC.
@@ -49,11 +53,14 @@ Tested Environment:
 
 4. Activate the virtual environment
 
-    On Windows: 
+    On Windows:
+
     ```posh
     .\RCAN3D\Scripts\activate
     ```
-    On macOS and Linux: 
+
+    On macOS and Linux:
+
     ```bash
     source RCAN3D/bin/activate
     ```
@@ -68,7 +75,7 @@ Tested Environment:
 
 ## Training
 
-[Sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0): This link contains a sample dataset, a demo model trained on that dataset, and one expected output (32-bit) at the following link:
+Before you train a RCAN model, you need to create a config JSON file. Please read the following instruction and check the example [`config.json`](config.json) in the repository.
 
 To train the RCAN model yourself, run:
 
@@ -76,9 +83,56 @@ To train the RCAN model yourself, run:
 python train.py -c config.json -o /path/to/training/output/dir
 ```
 
-Training data is an array of raw and GT image pairs and it must be specified in the input config JSON file. Please check the example [`config.json`](config.json) in the repository. Following optional variables can be also set in the JSON file (if not set, default values will be used):
+The user must specify the training data location in the input config JSON file to load the training images. We provide two ways to do so:
 
-- `validation_data` (array of image pairs)
+### (Option 1) Load images from a directory using `training_data_dir`
+
+```javascript
+"training_data_dir": {"raw":"/path/to/training/Raw/",
+                      "gt":"/path/to/training/GT/"}
+```
+
+If use option 1, please make sure that Raw and GT directories contain the same number of TIFF files. TIFF files in raw and GT directories are sorted in alphabetical order by name when matching the raw/GT pairs. The file names of each raw/GT pair are output in the terminal window when loading data. Please check the output to make sure raw and GT are correctly matched.
+
+### (Option 2) Load specific raw/grountruth image pairs using `training_image_pairs`
+
+```javascript
+"training_image_pairs": [
+      {"raw": "/path/to/training/Raw/image1.tif",
+        "gt": "/path/to/training/GT/image1.tif"},
+      {"raw": "/path/to/training/Raw/image2.tif",
+        "gt": "/path/to/training/GT/image2.tif"}
+]
+```
+
+If use option 2, training data is an array of raw and GT image pairs.
+
+Note that you can also use `training_data_dir` and `training_image_pairs` at the same time.
+
+```javascript
+"training_data_dir": {"raw":"/path/to/training/Raw/",
+                      "gt":"/path/to/training/GT/"},
+"training_image_pairs": [
+     {"raw": "/path/to/additional/Raw/image1.tif",
+      "gt": "/path/to/additional/GT/image1.tif"},
+     {"raw": "/path/to/additional/Raw/image2.tif",
+      "gt": "/path/to/additional/GT/image2.tif"}
+]
+```
+
+Following optional variables can be also set in the JSON file (if not set, default values will be used):
+
+- `validation_data_dir`
+  - Paths to raw and groud truth data directories for validation.
+
+    ```javascript
+    "validation_data_dir": {"raw":"/path/to/validation/Raw/",
+                            "gt":"/path/to/validation/GT/"}
+    ```
+
+  - Default: None
+
+- `validation_image_pairs` (array of image pairs)
   - Validation data on which to evaluate the loss and metrics at the end of each epoch
   - Default: None
 
@@ -167,4 +221,4 @@ ECCV 2018
 
 Copyright © 2020 [DRVision Technologies LLC.](https://www.drvtechnologies.com/)
 
-Released under [Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0) International Public License](https://creativecommons.org/licenses/by-nc/4.0/)
+Released under Creative Commons Attribution-NonCommercial 4.0 International Public License ([CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/))

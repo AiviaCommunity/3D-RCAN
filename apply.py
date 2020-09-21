@@ -57,12 +57,15 @@ model_path = get_model_path(args.model_dir)
 print('Loading model from', model_path)
 model = keras.models.load_model(str(model_path), compile=False)
 
+overlap_shape = [
+    max(1, x // 8) if x > 2 else 0 for x in model.input.shape.as_list()[1:-1]]
+
 for raw_file, gt_file in data:
     print('Loading raw image from', raw_file)
     raw = normalize(tifffile.imread(str(raw_file)))
 
     print('Applying model')
-    restored = apply(model, raw, verbose=True)
+    restored = apply(model, raw, overlap_shape=overlap_shape, verbose=True)
 
     result = [raw, restored]
 

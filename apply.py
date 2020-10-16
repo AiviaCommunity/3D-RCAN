@@ -2,11 +2,10 @@
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
-from rcan.utils import apply, get_model_path, normalize
+from rcan.utils import apply, get_model_path, normalize, load_model
 
 import argparse
 import itertools
-import keras
 import numpy as np
 import pathlib
 import tifffile
@@ -55,7 +54,7 @@ else:
 
 model_path = get_model_path(args.model_dir)
 print('Loading model from', model_path)
-model = keras.models.load_model(str(model_path), compile=False)
+model = load_model(str(model_path), input_shape=None)
 
 overlap_shape = [
     max(1, x // 8) if x > 2 else 0 for x in model.input.shape.as_list()[1:-1]]

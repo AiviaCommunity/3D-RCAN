@@ -10,6 +10,9 @@ import pathlib
 import re
 import tqdm
 import tqdm.utils
+import json
+import h5py
+import keras
 
 
 def normalize(image, p_min=2, p_max=99.9, dtype='float32'):
@@ -69,6 +72,44 @@ def get_model_path(directory, model_type='best'):
         return (min if model_type == 'best' else max)(files, key=get_value)
     except ValueError:
         raise RuntimeError(f'Unable to find model file in {directory}')
+
+
+def load_model(filename, input_shape=None):
+    '''
+    Loads a model from a file.
+
+    Parameters
+    ----------
+    filename: str
+        Model file to be loaded.
+    input_shape: tuple of int or None
+        Optional parameter to specify model's input shape (excluding the
+        channel dimension).
+
+    Returns
+    -------
+    keras.Model
+        Keras model instance.
+    '''
+
+    with h5py.File(filename, mode='r') as f:
+        model_config = f.attrs.get('model_config')
+        model_config = json.loads(model_config.decode('utf-8'))
+
+        # overwrite model's input shape
+        if input_shape is not None:
+            for layer in model_config['config']['layers']:
+                if layer['class_name'] == 'InputLayer':
+                    shape = layer['config']['batch_input_shape']
+                    if len(shape) - 2 != len(input_shape):
+                        raise ValueError(
+                            f'Input shape must be {len(shape) - 2}D; '
+                            f'Received input shape: {input_shape}')
+                    shape[1:-1] = input_shape
+
+        model = keras.models.model_from_config(model_config)
+        model.load_weights(filename)
+        return model
 
 
 def apply(model, data, batch_size=1, overlap_shape=None, verbose=False):

@@ -19,10 +19,19 @@
 
 Tested Environment:
 
-- Windows 10
-- Python 3.7
-- NVIDIA GTX 1060 6GB
-- CUDA 10.0 and cuDNN 7.6.5
+1. Smaller RCAN:
+    - RCAN Configuration: [config.json](./config.json)
+    - Windows 10
+    - Python 3.7
+    - NVIDIA GTX 1060 6GB
+    - CUDA 10.0 and cuDNN 7.6.5
+
+2. Larger RCAN:
+    - RCAN Configuration: [config_large.json](./config_large.json)
+    - Windows 10
+    - Python 3.7
+    - NVIDIA Tesla P100 16 GB
+    - CUDA 10.0 and cuDNN 7.6.5
 
 ## Sample dataset
 

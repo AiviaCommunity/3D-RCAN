@@ -19,14 +19,14 @@
 
 Tested Environment:
 
-1. Smaller RCAN:
+1. Smaller RCAN (for less capable GPUs):
     - RCAN Configuration: [config.json](./config.json)
     - Windows 10
     - Python 3.7
     - NVIDIA GTX 1060 6GB
     - CUDA 10.0 and cuDNN 7.6.5
 
-2. Larger RCAN:
+2. Larger RCAN (for better results):
     - RCAN Configuration: [config_large.json](./config_large.json)
     - Windows 10
     - Python 3.7

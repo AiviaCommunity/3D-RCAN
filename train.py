@@ -3,8 +3,8 @@
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
 from rcan.data_generator import DataGenerator
-from rcan.losses import mae
-from rcan.metrics import psnr
+from rcan.losses import mae, mse
+from rcan.metrics import psnr, ssim
 from rcan.model import build_rcan
 from rcan.utils import normalize, staircase_exponential_decay
 
@@ -93,7 +93,16 @@ schema = {
         'num_residual_groups': {'type': 'integer', 'minimum': 1},
         'channel_reduction': {'type': 'integer', 'minimum': 1},
         'epochs': {'type': 'integer', 'minimum': 1},
-        'steps_per_epoch': {'type': 'integer', 'minimum': 1}
+        'steps_per_epoch': {'type': 'integer', 'minimum': 1},
+        'data_augmentation': {'type': 'boolean'},
+        'intensity_threshold': {'type': 'number'},
+        'area_ratio_threshold': {'type': 'number', 'minimum': 0, 'maximum': 1},
+        'initial_learning_rate': {'type': 'number', 'minimum': 1e-6},
+        'loss': {'type': 'string', 'enum': ['mae', 'mse']},
+        'metrics': {
+            'type': 'array',
+            'items': {'type': 'string', 'enum': ['psnr', 'ssim']}
+        }
     },
     'additionalProperties': False,
     'anyOf': [
@@ -126,6 +135,12 @@ config.setdefault('num_channels', 32)
 config.setdefault('num_residual_blocks', 3)
 config.setdefault('num_residual_groups', 5)
 config.setdefault('channel_reduction', 8)
+config.setdefault('data_augmentation', True)
+config.setdefault('intensity_threshold', 0.25)
+config.setdefault('area_ratio_threshold', 0.5)
+config.setdefault('initial_learning_rate', 1e-4)
+config.setdefault('loss', 'mae')
+config.setdefault('metrics', ['psnr'])
 
 training_data = load_data(config, 'training')
 validation_data = load_data(config, 'validation')
@@ -163,15 +178,17 @@ model = build_rcan(
     channel_reduction=config['channel_reduction'])
 
 model.compile(
-    optimizer=keras.optimizers.Adam(lr=1e-4),
-    loss=mae,
-    metrics=[psnr])
+    optimizer=keras.optimizers.Adam(lr=config['initial_learning_rate']),
+    loss={'mae': mae, 'mse': mse}[config['loss']],
+    metrics=[{'psnr': psnr, 'ssim': ssim}[m] for m in config['metrics']])
 
 data_gen = DataGenerator(
     input_shape,
     1,
-    intensity_threshold=0.25,
-    area_ratio_threshold=0.05)
+    transform_function=(
+        'rotate_and_flip' if config['data_augmentation'] else None),
+    intensity_threshold=config['intensity_threshold'],
+    area_ratio_threshold=config['area_ratio_threshold'])
 
 training_data = data_gen.flow(*list(zip(*training_data)))
 

@@ -53,7 +53,7 @@ Tested Environment:
 ### (Option 2) Create a new virtual environment
 
 1. Download the [`requirements.txt`](requirements.txt) from the repository
-2. Open command prompt and change directory to where you put the `requirements.txt`
+2. Open command prompt and change folder to where you put the `requirements.txt`
 3. Create a new virtual environment:
 
     ```posh
@@ -94,7 +94,7 @@ python train.py -c config.json -o /path/to/training/output/dir
 
 The user must specify the training data location in the input config JSON file to load the training images. We provide two ways to do so:
 
-### (Option 1) Load images from a directory using `training_data_dir`
+### (Option 1) Load images from a folder using `training_data_dir`
 
 ```javascript
 "training_data_dir": {"raw":"/path/to/training/Raw/",
@@ -129,45 +129,155 @@ Note that you can also use `training_data_dir` and `training_image_pairs` at the
 ]
 ```
 
+### More options
+
 Following optional variables can be also set in the JSON file (if not set, default values will be used):
 
 - `validation_data_dir`
-  - Paths to raw and groud truth data directories for validation.
-
+  
+- Paths to raw and groud truth data directories for validation
+  
+  - Default: None
+  
     ```javascript
-    "validation_data_dir": {"raw":"/path/to/validation/Raw/",
+  "validation_data_dir": {"raw":"/path/to/validation/Raw/",
                             "gt":"/path/to/validation/GT/"}
+  ```
+  
+- `validation_image_pairs` (array of image pairs)
+  
+  - Validation data on which to evaluate the loss and metrics at the end of each epoch
+
+  - Default: None
+  
+    ```javascript
+    "validation_image_pairs": [
+         {"raw": "/path/to/additional/Raw_validation/image1.tif",
+          "gt": "/path/to/additional/GT_validation/image1.tif"},
+         {"raw": "/path/to/additional/Raw_validation/image2.tif",
+          "gt": "/path/to/additional/GT_validation/image2.tif"}
+        ]
+    ```
+  
+- `epochs` (integer)
+  
+  - Number of epochs to train the model
+
+  - Default: 300,  Range: >=1
+  
+    ```javascript
+    "epochs": 200
+    ```
+  
+- `steps_per_epoch` (integer)
+  
+  - Number of steps to perform back-propagation on mini-batches in each epoch
+
+  - Default: 256, Range: >=1
+  
+    ```javascript
+    "steps_per_epoch": 100
+    ```
+  
+- `num_channels` (integer)
+  
+  - Number of feature channels in RCAN
+
+  - Default: 32, Range: >=1
+  
+    ```javascript
+    "num_channels": 16
+    ```
+  
+- `num_residual_blocks` (integer)
+  
+  - Number of residual channel attention blocks in each residual group in RCAN
+
+  - Default: 3, Range: >=1
+  
+    ```javascript
+    "num_channels": 4
+    ```
+  
+- `num_residual_groups` (integer)
+  
+  - Number of residual groups in RCAN
+
+  - Default: 5, Range: >= 1
+  
+    ```javascript
+    "num_residual_groups": 4
+    ```
+  
+- `channel_reduction` (integer)
+  
+  - Channel reduction ratio for channel attention
+  
+  - Default: 8, Range: >=1
+  
+    ```javascript
+    "channel_reduction": 4
     ```
 
-  - Default: None
+- `data_augmentation` (boolean)
 
-- `validation_image_pairs` (array of image pairs)
-  - Validation data on which to evaluate the loss and metrics at the end of each epoch
-  - Default: None
+  - Enable/Disable data augmentation (rotation and flip)
 
-- `epochs` (integer)
-  - Number of epochs to train the model
-  - Default: 300
+  - Default: True
 
-- `steps_per_epoch` (integer)
-  - Number of steps to perform back-propagation on mini-batches in each epoch
-  - Default: 256
+    ```javascript
+    "data_augmentation": False
+    ```
 
-- `num_channels` (integer)
-  - Number of feature channels in RCAN
-  - Default: 32
+- `intensity_threshold` (number)
 
-- `num_residual_blocks` (integer)
-  - Number of residual channel attention blocks in each residual group in RCAN
-  - Default: 3
+  - Threshold used to reject patches with low average intensity 
 
-- `num_residual_groups` (integer)
-  - Number of residual groups in RCAN
-  - Default: 5
+  - Default: 0.25, Range: >0.0
 
-- `channel_reduction` (integer)
-  - Channel reduction ratio for channel attention
-  - Default: 8
+    ```javascript
+    "channel_reduction": 0.3
+    ```
+
+- `area_ratio_threshold` (number)
+
+  - Threshold used to reject patches with small areas of valid signal 
+
+  - Default: 0.5, Range: 0.0~1.0
+
+    ```javascript
+    "area_ratio_threshold": 0.3
+    ```
+
+- `initial_learning_rate` (number)
+
+  - Initial learning rate
+
+  - Default: 1e-4, Range: >= 1e-6
+
+    ```javascript
+    "initial_learning_rate": 1e-5
+    ```
+
+- `loss` (string)
+
+  - The objective function used for deep learning training
+
+  - Defaut: "mae", Options:  (1) “mae”= mean absolute error or (2) “mse”= mean squared error
+
+    ```javascript
+    "loss": "mse"
+    ```
+
+- `metrics` (array of strings)
+
+  - List of metrics to be evaluated during training
+
+  - Default: "psnr", Options: (1) “psnr”= Peak signal-to-noise ratio  and (2) “ssim”= structural similarity index measure
+
+    ```javascript
+    "metrics": ["psnr", "ssim"]
+    ```
 
 The default RCAN architecture is configured to be trained on a machine with 11GB GPU memory. If you encounter an OOM error during training, please try reducing model parameters such as `num_residual_blocks` or `num_residual_groups`. In the example [`config.json`](config.json), we reduce `num_residual_groups` to 3 to run on a 6GB GTX 1060 GPU.
 
@@ -178,6 +288,8 @@ The loss values are saved in the training output folder. You can use TensorBoard
 ```posh
 tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir
 ```
+
+
 
 ## Model Apply
 
@@ -191,32 +303,123 @@ To apply the trained model to an image, run:
 python apply.py -m /path/to/training/output/dir -i input_raw_image.tif -o output.tif
 ```
 
-The best model (i.e. the one with the lowest loss) will be selected from the model directory and applied. The output TIFF file is a two-channel ImageJ Hyperstack containing raw and restored images.
+The best model (i.e. the one with the lowest loss) will be selected from the model folder and applied. The output TIFF file is a two-channel ImageJ Hyperstack containing raw and restored images.
 
 ### (Option 2) Apply model to a folder of images
 
-You can turn on the “batch apply” mode by passing a directory path to the “-i” argument, e.g.:
+You can turn on the “batch apply” mode by passing a foldery path to the “-i” argument, e.g.:
 
 ```posh
 python apply.py -m /path/to/training/output/dir -i /path/to/input/image/dir -o /path/to/output/image/dir
 ```
 
-When the input (specified by “-i”) is a directory, the output (“-o”) must be a directory too. The output directory is created by the script if it doesn’t exist yet.
+When the input (specified by “-i”) is a folder, the output (“-o”) must be a folder too. The output folder is created by the script if it doesn’t exist yet.
 
-You can also specify a directory where ground truth images are located. The ground truth directory must contain the same number of images as the input directory.
+You can also specify a folder where ground truth images are located. The ground truth folder must contain the same number of images as the input folder.
 
 ```posh
 python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
 ```
 
-Following two more arguments are available:
+### All options
 
-- `-g` or `--ground_truth`
+- `-m` or `--model_dir` (string) [required]
 
-    Reference ground truth image. If it is set, the output TIFF is a three-channel ImageJ Hyperstack with raw, restored, and GT
-- `-b` or `--bpp`
+  - The path of the folder that contains the deep learning model to be applied
 
-    Bit depth of the output image (either 8, 16, or 32). If not specified, it will be set to 32
+  - The model with the lowest validation loss (parsed from the file name) in the folder will be applied
+
+    ```posh
+    -m ./model_folder
+    ```
+
+- `-i` or `--input` (string) [required]
+
+    - The path of the input raw image  
+
+        - The output (“-o”) must be an image too
+
+        ```posh
+        -i ./raw/image000004.tif
+        ```
+
+    -  The folder path that contains input raw images 
+
+        - The output (“-o”) must be a folder too
+
+        ```posh
+        -i ./raw_folder
+        ```
+
+- `-o` or `--output` (string) [required]
+
+    - The path of the output image  
+    
+        - The input(“-i”) must be an image too
+    
+          ```posh
+          -o ./Result/Result_image000004.tif
+          ```
+    
+    - The path of the output folder
+    
+        - The input(“-i”) must be a folder too
+    
+          ```posh
+          -o ./Result
+          ```
+    
+- `-g` or `--ground_truth` (string)
+
+    - Reference ground truth image. If it is set, the output TIFF is a three-channel ImageJ Hyperstack with raw, restored, and GT.
+    
+        - The input(“-i”) must be an image too
+    
+            ```posh
+            -g ./GT/image000004_decon.tif
+            ```
+    
+    - The path of the folder that constrains reference ground truth images. If it is set, each output TIFF is a three-channel ImageJ Hyperstack with raw, restored, and GT.
+    
+        - The input(“-i”) must be a folder too
+        
+            ```posh
+            -g ./GT
+            ```
+    
+- `-b` or `--bpp` (int)
+
+    - Bit depth of the output image
+    
+        - Default: 32, Options: 8, 16, or 32
+        
+        ```posh
+        -b 16
+        ```
+    
+- `-B` or `--block_shape`(tuple_of_ints)
+
+    - The dimensions (Z,Y,X) of the block used to divide an input image into small blocks that could fit the GPU memory
+
+        - If not specified, the block shape is automatically determined
+
+        - The order of the tuple: Z_size, Y_size, X_size
+
+            ```posh
+            -B 12,480,480
+            ```
+
+- `-O` or `--block_overlap_shape`(tuple_of_ints)
+
+    - The overlap sizes (Z,Y,X) between neighboring blocks
+
+        - Default: 2,32,32
+
+        - The order of the tuple: Z_size, Y_size, X_size
+
+            ```posh
+            -O 4,16,16
+            ```
 
 ## References
 

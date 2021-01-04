@@ -135,14 +135,14 @@ Following optional variables can be also set in the JSON file (if not set, defau
 
 - `validation_data_dir`
   
-- Paths to raw and groud truth data directories for validation
-  
+  - Paths to raw and groud truth data directories for validation
+    
   - Default: None
   
     ```javascript
-  "validation_data_dir": {"raw":"/path/to/validation/Raw/",
+    "validation_data_dir": {"raw":"/path/to/validation/Raw/",
                             "gt":"/path/to/validation/GT/"}
-  ```
+    ```
   
 - `validation_image_pairs` (array of image pairs)
   

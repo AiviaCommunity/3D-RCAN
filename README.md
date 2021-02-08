@@ -236,7 +236,7 @@ Following optional variables can be also set in the JSON file (if not set, defau
   - Default: 0.25, Range: >0.0
 
     ```javascript
-    "channel_reduction": 0.3
+    "intensity_threshold": 0.3
     ```
 
 - `area_ratio_threshold` (number)

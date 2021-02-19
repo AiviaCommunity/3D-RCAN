@@ -15,16 +15,101 @@ def tuple_of_ints(string):
     return tuple(int(s) for s in string.split(','))
 
 
+def percentile(x):
+    x = float(x)
+    if 0.0 <= x <= 100.0:
+        return x
+    else:
+        raise argparse.ArgumentTypeError(f'{x} not in range [0.0, 100.0]')
+
+
+def rescale(restored, gt):
+    '''Affine rescaling to minimize the MSE to the GT'''
+    cov = np.cov(restored.flatten(), gt.flatten())
+    a = cov[0, 1] / cov[0, 0]
+    b = gt.mean() - a * restored.mean()
+    return a * restored + b
+
+
+def save_imagej_hyperstack(filename, image):
+    assert image.ndim in [3, 4]
+    if image.ndim == 4:
+        image = np.transpose(image, (1, 0, 2, 3))
+
+    tifffile.imwrite(str(filename), image, imagej=True)
+
+
+def save_ome_tiff(filename, image):
+    assert image.ndim in [3, 4]
+    image = np.expand_dims(image, (1, 2) if image.ndim == 3 else 1)
+    c, t, z, y, x = image.shape
+
+    pixel_type = {
+        np.dtype('uint8'): 'Uint8',
+        np.dtype('uint16'): 'Uint16',
+        np.dtype('float32'): 'Float'
+    }[image.dtype]
+
+    channel_names = ['Raw', 'Restored', 'Ground Truth']
+    lsid_base = 'ome.drvtechnologies.com:'
+
+    channel_info = ''
+    for i, name in enumerate(channel_names[:c]):
+        channel_info += f'''\
+    <ChannelInfo Name="{name}" ID="{lsid_base}ChannelInfo:{i + 3}">
+      <ChannelComponent Index="{i}" Pixels="{lsid_base}Pixels:2"/>
+    </ChannelInfo>
+'''
+    description = f'''\
+<OME xmlns="http://www.openmicroscopy.org/XMLschemas/OME/FC/ome.xsd">
+  <Image Name="Unnamed [{pixel_type} {x}x{y}x{z}x{t} Channels]"
+         ID="{lsid_base}Image:1">
+{channel_info}\
+    <Pixels DimensionOrder="XYZTC" PixelType="{pixel_type}"
+            SizeX="{x}" SizeY="{y}" SizeZ="{z}" SizeT="{t}" SizeC="{c}"
+            BigEndian="false" ID="{lsid_base}Pixels:2">
+      <TiffData IFD="0" NumPlanes="{z * c * t}"/>
+    </Pixels>
+  </Image>
+</OME>
+'''
+
+    tifffile.imwrite(
+        filename,
+        data=image,
+        description=description,
+        metadata=None)
+
+
+def save_tiff(filename, image, format):
+    {
+        'imagej': save_imagej_hyperstack,
+        'ome': save_ome_tiff
+    }[format](filename, image)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model_dir', type=str, required=True)
 parser.add_argument('-i', '--input', type=str, required=True)
 parser.add_argument('-o', '--output', type=str, required=True)
+parser.add_argument(
+    '-f', '--output_tiff_format', type=str,
+    choices=['imagej', 'ome'], default='imagej')
 parser.add_argument('-g', '--ground_truth', type=str)
 parser.add_argument('-b', '--bpp', type=int, choices=[8, 16, 32], default=32)
-parser.add_argument('-B', '--block_shape', type=tuple_of_ints, default=None)
+parser.add_argument('-B', '--block_shape', type=tuple_of_ints)
+parser.add_argument('-O', '--block_overlap_shape', type=tuple_of_ints)
+parser.add_argument('--p_min', type=percentile, default=2.0)
+parser.add_argument('--p_max', type=percentile, default=99.9)
+parser.add_argument('--rescale', action='store_true')
 parser.add_argument(
-    '-O', '--block_overlap_shape', type=tuple_of_ints, default=None)
+    '--normalize_output_range_between_zero_and_one', action='store_true')
 args = parser.parse_args()
+
+if args.rescale and args.normalize_output_range_between_zero_and_one:
+    raise ValueError(
+        'You cannot set both `rescale` and '
+        '`normalize_output_range_between_zero_and_one` at the same time')
 
 input_path = pathlib.Path(args.input)
 output_path = pathlib.Path(args.output)
@@ -73,7 +158,7 @@ else:
 
 for raw_file, gt_file in data:
     print('Loading raw image from', raw_file)
-    raw = normalize(tifffile.imread(str(raw_file)))
+    raw = normalize(tifffile.imread(str(raw_file)), args.p_min, args.p_max)
 
     print('Applying model')
     restored = apply(model, raw, overlap_shape=overlap_shape, verbose=True)
@@ -84,13 +169,21 @@ for raw_file, gt_file in data:
         print('Loading ground truth image from', gt_file)
         gt = tifffile.imread(str(gt_file))
         if raw.shape == gt.shape:
-            result.append(normalize(gt))
+            gt = normalize(gt, args.p_min, args.p_max)
+            if args.rescale:
+                restored = rescale(restored, gt)
+            result = [raw, restored, gt]
         else:
             print('Ground truth image discarded due to image shape mismatch')
 
+    if args.normalize_output_range_between_zero_and_one:
+        def normalize_between_zero_and_one(m):
+            max_val, min_val = m.max(), m.min()
+            diff = max_val - min_val
+            return (m - min_val) / diff if diff > 0 else np.zeros_like(m)
+        result = [normalize_between_zero_and_one(m) for m in result]
+
     result = np.stack(result)
-    if result.ndim == 4:
-        result = np.transpose(result, (1, 0, 2, 3))
 
     if args.bpp == 8:
         result = np.clip(255 * result, 0, 255).astype('uint8')
@@ -103,4 +196,4 @@ for raw_file, gt_file in data:
         output_file = output_path
 
     print('Saving output image to', output_file)
-    tifffile.imwrite(str(output_file), result, imagej=True)
+    save_tiff(str(output_file), result, args.output_tiff_format)

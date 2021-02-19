@@ -421,6 +421,48 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
             -O 4,16,16
             ```
 
+-  `--normalize_output_range_between_zero_and_one`
+
+  - To normalize the output intensity range to [0, 1]
+
+    - Minimum intensity is mapped to 0
+
+    - Maximum intensity is mapped to 1
+
+      ```
+      --normalize_output_range_between_zero_and_one
+      ```
+
+  - Combine with --bpp, for example to normalized to 16-bit  [0, 65535] 
+
+    - Minimum intensity is mapped to 0
+    - Maximum intensity is mapped to 65535
+
+    ```
+    -b 16 --normalize_output_range_between_zero_and_one
+    ```
+
+- `--rescale`
+
+  - To perform affine rescaling to minimize the mean squared error between restored and ground truth images
+  - This flag is especially useful if you want to conduct the same image quality analysis as CARE
+
+  ```
+  --rescale
+  ```
+
+- `-f` or `--output_tiff_format`(str)
+
+  - To set output format
+
+    1. “imagej” -  to save as ImageJ Hyperstack (XYCZT) [default]
+
+    2. “ome” - to save as OME-TIFF (XYZCT)
+
+       ```
+       -f ome
+       ```
+
 ## References
 
 <a id="1">[1]</a>

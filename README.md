@@ -33,9 +33,16 @@ Tested Environment:
     - NVIDIA Tesla P100 16 GB
     - CUDA 10.0 and cuDNN 7.6.5
 
-## Sample dataset
+## Dataset
 
-[Sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0): This link contains a dataset, a demo model trained on that dataset, and one expected output (32-bit)
+1. [Sample ER dataset and demo model](https://www.dropbox.com/sh/hieldept1x476dw/AAC0pY3FrwdZBctvFF0Fx0L3a?dl=0): This link contains a dataset, a demo model trained on that dataset, and one expected output (32-bit)
+
+2. [Data for 3D RCAN Paper](https://zenodo.org/record/4624364#.YF4lBa9Kgal): This data release contains all training and testing data for the 3D RCAN paper. Data size: After upzip, the total size is 521 GB. Please leave enough space in the disk before unzip.Data are organized in four categories:
+      - **Denoising**: It contains all training and testing data for Actin, ER, Golgi, lysosome, Microtubule, Tomm20 Mitochondria and Matrix protein Mitochondria.
+      - **Phantom Spheres**: It contains training and testing data for synthetic blurred phantom sphere(2, 3 and 4 times). The ground truth is the synthetic phantom sphere without blurring.
+      - **Confocal to STED**: It contains training and testing data for three different structure shown in the paper (Microtubule, nuclear pore complex and DNA). It also contains live cell data that nucleus stained by SiR for confocal to STED image modality transfer learning. Raw and GT data in the training and testing folder refer to confocal and STED images.
+      - **Expansion Microscopy**: It contains training and testing data for two different structure shown in the paper. (Microtubule and Tomm20 stained Mitochondria). Raw and GT data in the training and testing folder refer to Synthetic raw and deconvolved expansion microscopy iSIM images.
+      - **live cell test data Microscopy**: It contains:(1).U2OS cells transfected with matrix protein Mitochondria and Lamp1 labeled lyososome for denoising; (2). Jukat T cells transfected with EMTB-GFP for expansion microscopy.
 
 ## Dependencies Installation
 

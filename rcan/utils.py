@@ -13,6 +13,53 @@ import tqdm.utils
 import json
 import h5py
 import keras
+from tensorflow.python.client.device_lib import list_local_devices
+
+
+def get_gpu_count():
+    '''Returns the number of available GPUs.'''
+    return len([x for x in list_local_devices() if x.device_type == 'GPU'])
+
+
+def is_multi_gpu_model(model):
+    '''Checks if the model supports multi-GPU data parallelism.'''
+    return hasattr(model, 'is_multi_gpu_model') and model.is_multi_gpu_model
+
+
+def convert_to_multi_gpu_model(model, gpus=None):
+    '''
+    Converts a model into a multi-GPU version if possible.
+
+    Parameters
+    ----------
+    model: keras.Model
+        Model to be converted.
+    gpus: int or None
+        Number of GPUs used to create model replicas. If None, all GPUs
+        available on the device will be used.
+
+    Returns
+    -------
+    keras.Model
+        Multi-GPU model.
+    '''
+
+    gpus = gpus or get_gpu_count()
+
+    if gpus <= 1 or is_multi_gpu_model(model):
+        return model
+
+    multi_gpu_model = keras.utils.multi_gpu_model(
+        model, gpus=gpus, cpu_relocation=True)
+
+    # copy weights
+    multi_gpu_model.layers[
+        -(len(multi_gpu_model.outputs) + 1)].set_weights(model.get_weights())
+
+    setattr(multi_gpu_model, 'is_multi_gpu_model', True)
+    setattr(multi_gpu_model, 'gpus', gpus)
+
+    return multi_gpu_model
 
 
 def normalize(image, p_min=2, p_max=99.9, dtype='float32'):

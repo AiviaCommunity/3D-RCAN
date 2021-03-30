@@ -7,6 +7,7 @@ from rcan.losses import mae, mse
 from rcan.metrics import psnr, ssim
 from rcan.model import build_rcan
 from rcan.utils import normalize, staircase_exponential_decay
+from rcan.utils import get_gpu_count, convert_to_multi_gpu_model
 
 import argparse
 import functools
@@ -177,6 +178,9 @@ model = build_rcan(
     num_residual_groups=config['num_residual_groups'],
     channel_reduction=config['channel_reduction'])
 
+gpus = get_gpu_count()
+model = convert_to_multi_gpu_model(model, gpus)
+
 model.compile(
     optimizer=keras.optimizers.Adam(lr=config['initial_learning_rate']),
     loss={'mae': mae, 'mse': mse}[config['loss']],
@@ -184,7 +188,7 @@ model.compile(
 
 data_gen = DataGenerator(
     input_shape,
-    1,
+    gpus,
     transform_function=(
         'rotate_and_flip' if config['data_augmentation'] else None),
     intensity_threshold=config['intensity_threshold'],

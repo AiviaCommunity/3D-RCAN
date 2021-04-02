@@ -8,6 +8,7 @@ from rcan.metrics import psnr, ssim
 from rcan.model import build_rcan
 from rcan.utils import normalize, staircase_exponential_decay
 from rcan.utils import get_gpu_count, convert_to_multi_gpu_model
+import rcan.callbacks
 
 import argparse
 import functools
@@ -206,17 +207,25 @@ output_dir = pathlib.Path(args.output_dir)
 output_dir.mkdir(parents=True, exist_ok=True)
 
 print('Training RCAN model')
+steps_per_epoch = config['steps_per_epoch'] // gpus
+validation_steps = None if validation_data is None else steps_per_epoch
 model.fit_generator(
     training_data,
     epochs=config['epochs'],
-    steps_per_epoch=config['steps_per_epoch'],
+<<<<<<< HEAD
+    steps_per_epoch=steps_per_epoch,
     validation_data=validation_data,
-    validation_steps=config['steps_per_epoch'],
+    validation_steps=validation_steps,
+=======
+    steps_per_epoch=config['steps_per_epoch'] // gpus,
+    validation_data=validation_data,
+    validation_steps=config['steps_per_epoch'] // gpus,
+>>>>>>> ae45144... Update steps_per_epoch in train.py
     verbose=0,
     callbacks=[
         keras.callbacks.LearningRateScheduler(
             staircase_exponential_decay(config['epochs'] // 4)),
-        keras.callbacks.ModelCheckpoint(
+        rcan.callbacks.ModelCheckpoint(
             str(output_dir / checkpoint_filepath),
             monitor='loss' if validation_data is None else 'val_loss',
             save_best_only=True),

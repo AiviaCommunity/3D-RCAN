@@ -86,6 +86,18 @@ def staircase_exponential_decay(n):
     return lambda epoch, lr: lr / 2 if epoch != 0 and epoch % n == 0 else lr
 
 
+def save_model(filename, model, weights_only=False):
+    if is_multi_gpu_model(model):
+        m = model.layers[-(len(model.outputs) + 1)]
+    else:
+        m = model
+
+    if weights_only:
+        m.save_weights(filename, overwrite=True)
+    else:
+        m.save(filename, overwrite=True)
+
+
 def get_model_path(directory, model_type='best'):
     '''
     Finds a model file in the given directory.
@@ -244,6 +256,7 @@ def apply(model, data, batch_size=1, overlap_shape=None, verbose=False):
         'linear_ramp'
     )[(slice(1, -1),) * image_dim]
 
+    batch_size = model.gpus if is_multi_gpu_model(model) else 1
     batch = np.zeros(
         (batch_size, *model_input_image_shape, num_input_channels),
         dtype=np.float32)

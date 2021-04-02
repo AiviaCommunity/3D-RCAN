@@ -2,16 +2,18 @@
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
+from rcan.callbacks import ModelCheckpoint, TqdmCallback
 from rcan.data_generator import DataGenerator
 from rcan.losses import mae, mse
 from rcan.metrics import psnr, ssim
 from rcan.model import build_rcan
-from rcan.utils import normalize, staircase_exponential_decay
-from rcan.utils import get_gpu_count, convert_to_multi_gpu_model
-import rcan.callbacks
+from rcan.utils import (
+    convert_to_multi_gpu_model,
+    get_gpu_count,
+    normalize,
+    staircase_exponential_decay)
 
 import argparse
-import functools
 import itertools
 import json
 import jsonschema
@@ -19,11 +21,6 @@ import keras
 import numpy as np
 import pathlib
 import tifffile
-
-from tqdm import tqdm as std_tqdm
-from tqdm.keras import TqdmCallback
-from tqdm.utils import IS_WIN
-tqdm = functools.partial(std_tqdm, dynamic_ncols=True, ascii=IS_WIN)
 
 
 def load_data(config, data_type):
@@ -203,34 +200,29 @@ if validation_data is not None:
 else:
     checkpoint_filepath = 'weights_{epoch:03d}_{loss:.8f}.hdf5'
 
+steps_per_epoch = config['steps_per_epoch'] // gpus
+validation_steps = None if validation_data is None else steps_per_epoch
+
 output_dir = pathlib.Path(args.output_dir)
 output_dir.mkdir(parents=True, exist_ok=True)
 
 print('Training RCAN model')
-steps_per_epoch = config['steps_per_epoch'] // gpus
-validation_steps = None if validation_data is None else steps_per_epoch
 model.fit_generator(
     training_data,
     epochs=config['epochs'],
-<<<<<<< HEAD
     steps_per_epoch=steps_per_epoch,
     validation_data=validation_data,
     validation_steps=validation_steps,
-=======
-    steps_per_epoch=config['steps_per_epoch'] // gpus,
-    validation_data=validation_data,
-    validation_steps=config['steps_per_epoch'] // gpus,
->>>>>>> ae45144... Update steps_per_epoch in train.py
     verbose=0,
     callbacks=[
         keras.callbacks.LearningRateScheduler(
             staircase_exponential_decay(config['epochs'] // 4)),
-        rcan.callbacks.ModelCheckpoint(
-            str(output_dir / checkpoint_filepath),
-            monitor='loss' if validation_data is None else 'val_loss',
-            save_best_only=True),
         keras.callbacks.TensorBoard(
             log_dir=str(output_dir),
             write_graph=False),
-        TqdmCallback(tqdm_class=tqdm)
+        ModelCheckpoint(
+            str(output_dir / checkpoint_filepath),
+            monitor='loss' if validation_data is None else 'val_loss',
+            save_best_only=True),
+        TqdmCallback()
     ])

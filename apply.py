@@ -2,7 +2,14 @@
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
-from rcan.utils import apply, get_model_path, normalize, load_model
+from rcan.utils import (
+    apply,
+    convert_to_multi_gpu_model,
+    get_model_path,
+    load_model,
+    normalize,
+    rescale,
+    save_tiff)
 
 import argparse
 import itertools
@@ -21,71 +28,6 @@ def percentile(x):
         return x
     else:
         raise argparse.ArgumentTypeError(f'{x} not in range [0.0, 100.0]')
-
-
-def rescale(restored, gt):
-    '''Affine rescaling to minimize the MSE to the GT'''
-    cov = np.cov(restored.flatten(), gt.flatten())
-    a = cov[0, 1] / cov[0, 0]
-    b = gt.mean() - a * restored.mean()
-    return a * restored + b
-
-
-def save_imagej_hyperstack(filename, image):
-    assert image.ndim in [3, 4]
-    if image.ndim == 4:
-        image = np.transpose(image, (1, 0, 2, 3))
-
-    tifffile.imwrite(str(filename), image, imagej=True)
-
-
-def save_ome_tiff(filename, image):
-    assert image.ndim in [3, 4]
-    image = np.expand_dims(image, (1, 2) if image.ndim == 3 else 1)
-    c, t, z, y, x = image.shape
-
-    pixel_type = {
-        np.dtype('uint8'): 'Uint8',
-        np.dtype('uint16'): 'Uint16',
-        np.dtype('float32'): 'Float'
-    }[image.dtype]
-
-    channel_names = ['Raw', 'Restored', 'Ground Truth']
-    lsid_base = 'ome.drvtechnologies.com:'
-
-    channel_info = ''
-    for i, name in enumerate(channel_names[:c]):
-        channel_info += f'''\
-    <ChannelInfo Name="{name}" ID="{lsid_base}ChannelInfo:{i + 3}">
-      <ChannelComponent Index="{i}" Pixels="{lsid_base}Pixels:2"/>
-    </ChannelInfo>
-'''
-    description = f'''\
-<OME xmlns="http://www.openmicroscopy.org/XMLschemas/OME/FC/ome.xsd">
-  <Image Name="Unnamed [{pixel_type} {x}x{y}x{z}x{t} Channels]"
-         ID="{lsid_base}Image:1">
-{channel_info}\
-    <Pixels DimensionOrder="XYZTC" PixelType="{pixel_type}"
-            SizeX="{x}" SizeY="{y}" SizeZ="{z}" SizeT="{t}" SizeC="{c}"
-            BigEndian="false" ID="{lsid_base}Pixels:2">
-      <TiffData IFD="0" NumPlanes="{z * c * t}"/>
-    </Pixels>
-  </Image>
-</OME>
-'''
-
-    tifffile.imwrite(
-        filename,
-        data=image,
-        description=description,
-        metadata=None)
-
-
-def save_tiff(filename, image, format):
-    {
-        'imagej': save_imagej_hyperstack,
-        'ome': save_ome_tiff
-    }[format](filename, image)
 
 
 parser = argparse.ArgumentParser()
@@ -147,7 +89,8 @@ else:
 
 model_path = get_model_path(args.model_dir)
 print('Loading model from', model_path)
-model = load_model(str(model_path), input_shape=args.block_shape)
+model = convert_to_multi_gpu_model(
+    load_model(str(model_path), input_shape=args.block_shape))
 
 if args.block_overlap_shape is None:
     overlap_shape = [

@@ -141,22 +141,22 @@ Note that you can also use `training_data_dir` and `training_image_pairs` at the
 Following optional variables can be also set in the JSON file (if not set, default values will be used):
 
 - `validation_data_dir`
-  
+
   - Paths to raw and groud truth data directories for validation
-    
+
   - Default: None
-  
+
     ```javascript
     "validation_data_dir": {"raw":"/path/to/validation/Raw/",
                             "gt":"/path/to/validation/GT/"}
     ```
-  
+
 - `validation_image_pairs` (array of image pairs)
-  
+
   - Validation data on which to evaluate the loss and metrics at the end of each epoch
 
   - Default: None
-  
+
     ```javascript
     "validation_image_pairs": [
          {"raw": "/path/to/additional/Raw_validation/image1.tif",
@@ -165,63 +165,75 @@ Following optional variables can be also set in the JSON file (if not set, defau
           "gt": "/path/to/additional/GT_validation/image2.tif"}
         ]
     ```
-  
+
+- `raw_data_format` (string)
+
+  - The ordering of the dimensions in the raw image
+
+  - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
+
+- `gt_data_format` (string)
+
+  - The ordering of the dimensions in the GT image
+
+  - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
+
 - `epochs` (integer)
-  
+
   - Number of epochs to train the model
 
   - Default: 300,  Range: >=1
-  
+
     ```javascript
     "epochs": 200
     ```
-  
+
 - `steps_per_epoch` (integer)
-  
+
   - Number of steps to perform back-propagation on mini-batches in each epoch
 
   - Default: 256, Range: >=1
-  
+
     ```javascript
     "steps_per_epoch": 100
     ```
-  
+
 - `num_channels` (integer)
-  
+
   - Number of feature channels in RCAN
 
   - Default: 32, Range: >=1
-  
+
     ```javascript
     "num_channels": 16
     ```
-  
+
 - `num_residual_blocks` (integer)
-  
+
   - Number of residual channel attention blocks in each residual group in RCAN
 
   - Default: 3, Range: >=1
-  
+
     ```javascript
     "num_channels": 4
     ```
-  
+
 - `num_residual_groups` (integer)
-  
+
   - Number of residual groups in RCAN
 
   - Default: 5, Range: >= 1
-  
+
     ```javascript
     "num_residual_groups": 4
     ```
-  
+
 - `channel_reduction` (integer)
-  
+
   - Channel reduction ratio for channel attention
-  
+
   - Default: 8, Range: >=1
-  
+
     ```javascript
     "channel_reduction": 4
     ```
@@ -238,7 +250,7 @@ Following optional variables can be also set in the JSON file (if not set, defau
 
 - `intensity_threshold` (number)
 
-  - Threshold used to reject patches with low average intensity 
+  - Threshold used to reject patches with low average intensity
 
   - Default: 0.25, Range: >0.0
 
@@ -248,7 +260,7 @@ Following optional variables can be also set in the JSON file (if not set, defau
 
 - `area_ratio_threshold` (number)
 
-  - Threshold used to reject patches with small areas of valid signal 
+  - Threshold used to reject patches with small areas of valid signal
 
   - Default: 0.5, Range: 0.0~1.0
 
@@ -296,6 +308,16 @@ The loss values are saved in the training output folder. You can use TensorBoard
 tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir
 ```
 
+### Multi-channel Training
+
+If the Raw (input) contains more than one channels, all channel images are used as inputs for the RCAN model training. However, the GT (output) can only have one channel.
+
+### Super-resolution Training
+
+If the resolution of the GT (output) is higher than the resolution of Raw (input), a subpixel convolution layer is added as the last layer to generate up-sampled super-resolution outputs. The subpixel convolution layer is a combination of standard convolution and pixel shuffle for up-sampling.
+
+
+
 
 
 ## Model Apply
@@ -342,7 +364,7 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
 
 - `-i` or `--input` (string) [required]
 
-    - The path of the input raw image  
+    - The path of the input raw image
 
         - The output (“-o”) must be an image too
 
@@ -350,7 +372,7 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
         -i ./raw/image000004.tif
         ```
 
-    -  The folder path that contains input raw images 
+    -  The folder path that contains input raw images
 
         - The output (“-o”) must be a folder too
 
@@ -360,50 +382,70 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
 
 - `-o` or `--output` (string) [required]
 
-    - The path of the output image  
-    
+    - The path of the output image
+
         - The input(“-i”) must be an image too
-    
+
           ```posh
           -o ./Result/Result_image000004.tif
           ```
-    
+
     - The path of the output folder
-    
+
         - The input(“-i”) must be a folder too
-    
+
           ```posh
           -o ./Result
           ```
-    
+
 - `-g` or `--ground_truth` (string)
 
     - Reference ground truth image. If it is set, the output TIFF is a three-channel ImageJ Hyperstack with raw, restored, and GT.
-    
+
         - The input(“-i”) must be an image too
-    
+
             ```posh
             -g ./GT/image000004_decon.tif
             ```
-    
+
     - The path of the folder that constrains reference ground truth images. If it is set, each output TIFF is a three-channel ImageJ Hyperstack with raw, restored, and GT.
-    
+
         - The input(“-i”) must be a folder too
-        
+
             ```posh
             -g ./GT
             ```
-    
+
+- `-d` or `--input_data_format` (string)
+
+    - The ordering of the dimensions in the input raw image
+
+        - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
+
+        ```posh
+        -d ZCYX
+        ```
+
+- `-D` or `--ground_truth_data_format` (string)
+
+    - The ordering of the dimensions in the GT image
+
+        - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
+
+        ```posh
+        -D ZCYX
+        ```
+
 - `-b` or `--bpp` (int)
 
     - Bit depth of the output image
-    
+
         - Default: 32, Options: 8, 16, or 32
-        
+
         ```posh
         -b 16
         ```
-    
+
 - `-B` or `--block_shape`(tuple_of_ints)
 
     - The dimensions (Z,Y,X) of the block used to divide an input image into small blocks that could fit the GPU memory
@@ -430,17 +472,17 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
 
 -  `--normalize_output_range_between_zero_and_one`
 
-  - To normalize the output intensity range to [0, 1]
+    - To normalize the output intensity range to [0, 1]
 
-    - Minimum intensity is mapped to 0
+      - Minimum intensity is mapped to 0
 
-    - Maximum intensity is mapped to 1
+      - Maximum intensity is mapped to 1
 
-      ```
-      --normalize_output_range_between_zero_and_one
-      ```
+        ```
+        --normalize_output_range_between_zero_and_one
+        ```
 
-  - Combine with --bpp, for example to normalized to 16-bit  [0, 65535] 
+  - Combine with --bpp, for example to normalized to 16-bit  [0, 65535]
 
     - Minimum intensity is mapped to 0
     - Maximum intensity is mapped to 65535

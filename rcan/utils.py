@@ -15,6 +15,7 @@ import tifffile
 import tqdm
 import tqdm.utils
 
+from . import layers  # noqa: F401
 from tensorflow.python.client.device_lib import list_local_devices
 
 
@@ -181,6 +182,60 @@ def load_model(filename, input_shape=None):
         return model
 
 
+def load_image(filename, ndim, data_format, p_min=2, p_max=99.9):
+    '''
+    Loads a tiff image from a file.
+
+    Parameters
+    ----------
+    filename: str
+        Name of the file.
+    ndim: int
+        Number of image dimensions.
+    data_format: str or None
+        The ordering of the dimensions in the image.
+    p_min, p_max: float
+        Normalization parameters.
+    '''
+
+    def get_default_format(ndim, channel_axis):
+        fmt = 'YX' if ndim == 2 else 'ZYX'
+
+        if channel_axis is True or channel_axis == 'first':
+            fmt = 'C' + fmt
+        elif channel_axis == 'last':
+            fmt = fmt + 'C'
+
+        return fmt
+
+    if ndim not in (2, 3):
+        raise ValueError(f'{ndim}D image is not supported')
+
+    image = tifffile.imread(filename).astype('float32')
+
+    if image.ndim not in (ndim, ndim + 1):
+        raise ValueError(f'Input array must be {ndim}D or {ndim + 1}D')
+
+    has_channel_axis = image.ndim == ndim + 1
+
+    if not data_format:
+        src = get_default_format(ndim, has_channel_axis)
+    else:
+        src = data_format.upper()
+        if sorted(src) != sorted(get_default_format(ndim, has_channel_axis)):
+            raise ValueError('Invalid data format:', data_format)
+
+    image = tifffile.transpose_axes(
+        image,
+        src,
+        get_default_format(ndim, 'last'))
+
+    for c in range(image.shape[-1]):
+        image[..., c] = normalize(image[..., c], p_min, p_max)
+
+    return image
+
+
 def apply(model, data, overlap_shape=None, verbose=False):
     '''
     Applies a model to an input image. The input image stack is split into
@@ -205,15 +260,15 @@ def apply(model, data, overlap_shape=None, verbose=False):
         Result image.
     '''
 
-    model_input_image_shape = tuple(model.input.shape.as_list()[1:-1])
-    model_output_image_shape = tuple(model.output.shape.as_list()[1:-1])
+    model_input_image_shape = model.input_shape[1:-1]
+    model_output_image_shape = model.output_shape[1:-1]
 
     if len(model_input_image_shape) != len(model_output_image_shape):
         raise NotImplementedError
 
     image_dim = len(model_input_image_shape)
-    num_input_channels = model.input.shape[-1].value
-    num_output_channels = model.output.shape[-1].value
+    num_input_channels = model.input_shape[-1]
+    num_output_channels = model.output_shape[-1]
 
     scale_factor = tuple(
         fractions.Fraction(o, i) for i, o in zip(
@@ -246,8 +301,9 @@ def apply(model, data, overlap_shape=None, verbose=False):
         else:
             raise NotImplementedError
     elif len(overlap_shape) != image_dim:
-        raise ValueError(f'Overlap shape must be {image_dim}D; '
-                         f'Received shape: {overlap_shape}')
+        raise ValueError(
+            f'Overlap shape must be {image_dim}D; '
+            f'Received shape: {overlap_shape}')
 
     step_shape = tuple(
         m - o for m, o in zip(
@@ -278,11 +334,7 @@ def apply(model, data, overlap_shape=None, verbose=False):
     result = []
 
     for image in data:
-        # add the channel dimension if necessary
-        if len(image.shape) == image_dim:
-            image = image[..., np.newaxis]
-
-        if (len(image.shape) != image_dim + 1
+        if (image.ndim != image_dim + 1
                 or image.shape[-1] != num_input_channels):
             raise ValueError(f'Input image must be {image_dim}D with '
                              f'{num_input_channels} channels; '
@@ -324,7 +376,7 @@ def apply(model, data, overlap_shape=None, verbose=False):
                 batch[batch_index] = m
                 rois.append((r1, r2))
 
-            p = model.predict(batch, batch_size=batch_size)
+            p = model.predict_on_batch(batch)
 
             for batch_index in range(len(rois)):
                 for channel in range(num_output_channels):
@@ -338,40 +390,134 @@ def apply(model, data, overlap_shape=None, verbose=False):
         for channel in range(num_output_channels):
             applied[..., channel] /= sum_weight
 
-        if applied.shape[-1] == 1:
-            applied = applied[..., 0]
-
         result.append(applied)
 
     return result if input_is_list else result[0]
 
 
-def save_imagej_hyperstack(filename, image):
-    assert image.ndim in [3, 4]
-    if image.ndim == 4:
-        image = np.transpose(image, (1, 0, 2, 3))
+def save_imagej_hyperstack(filename, image, data_format=None):
+    '''
+    Saves an image as ImageJ Hyperstack.
 
-    tifffile.imwrite(str(filename), image, imagej=True)
+    Parameters
+    ----------
+    filename: str
+        Name of the file.
+    image: array_like
+        Image to be saved.
+    data_format: str or None
+        The ordering of the dimensions in the image. If not specified,
+        one of following default values will be used according to the
+        dimensionality of the input image:
+        - 2D: `YX`
+        - 3D: `ZYX`
+        - 4D: `CZYX`
+        - 5D: `TCZYX`
+        - 6D: `STCZYX`
+    '''
+
+    if not 2 <= image.ndim <= 6:
+        raise ValueError(
+            'Image dimension must be between 2 and 6; '
+            f'Received image shape: {image.shape}')
+
+    if data_format is None:
+        data_format = 'STCZYX'[-image.ndim:]
+
+    data_format = data_format.upper()
+
+    if len(data_format) != image.ndim:
+        raise ValueError(
+            f'Length of `data_format` must be {image.ndim}; '
+            f'Received data format: {data_format}')
+
+    if (len(set(data_format)) != len(data_format)
+            or not all(s in data_format for s in 'XY')
+            or not all(s in 'TZCYXS' for s in data_format)):
+        raise ValueError(f'Invalid data format: {data_format}')
+
+    tifffile.imwrite(
+        str(filename),
+        tifffile.transpose_axes(image, data_format, 'TZCYXS'),
+        imagej=True)
 
 
-def save_ome_tiff(filename, image):
-    assert image.ndim in [3, 4]
-    image = np.expand_dims(image, (1, 2) if image.ndim == 3 else 1)
+def save_ome_tiff(filename,
+                  image,
+                  channel_names=None,
+                  data_format=None):
+    '''
+    Saves an image as OME-TIFF.
+
+    Parameters
+    ----------
+    filename: str
+        Name of the file.
+    image: array_like
+        Image to be saved.
+    channel_names: None or list of str
+        Channel names.
+    data_format: str or None
+        The ordering of the dimensions in the image. If not specified,
+        one of following default values will be used according to the
+        dimensionality of the input image:
+        - 2D: `YX`
+        - 3D: `ZYX`
+        - 4D: `CZYX`
+        - 5D: `TCZYX`
+    '''
+
+    if not 2 <= image.ndim <= 5:
+        raise ValueError(
+            'Image dimension must be between 2 and 5; '
+            f'Received image shape: {image.shape}')
+
+    if data_format is None:
+        data_format = 'TCZYX'[-image.ndim:]
+
+    data_format = data_format.upper()
+
+    if len(data_format) != image.ndim:
+        raise ValueError(
+            f'Length of `data_format` must be {image.ndim}; '
+            f'Received data format: {data_format}')
+
+    if (len(set(data_format)) != len(data_format)
+            or not all(s in data_format for s in 'XY')
+            or not all(s in 'CTZYX' for s in data_format)):
+        raise ValueError(f'Invalid data format: {data_format}')
+
+    image = tifffile.transpose_axes(image, data_format, 'CTZYX')
     c, t, z, y, x = image.shape
 
-    pixel_type = {
-        np.dtype('uint8'): 'Uint8',
-        np.dtype('uint16'): 'Uint16',
-        np.dtype('float32'): 'Float'
-    }[image.dtype]
+    if image.dtype == np.uint8:
+        pixel_type = 'Uint8'
+    elif image.dtype == np.uint16:
+        pixel_type = 'Uint16'
+    elif image.dtype == np.float32:
+        pixel_type = 'Float'
+    else:
+        raise ValueError(f'Unsupported data type: {image.dtype}')
 
-    channel_names = ['Raw', 'Restored', 'Ground Truth']
-    lsid_base = 'ome.drvtechnologies.com:'
+    if channel_names is None:
+        channel_names = []
+
+    if isinstance(channel_names, (list, tuple)):
+        if len(channel_names) < c:
+            unnamed = (
+                ['Unnamed']
+                + [f'Unnamed ({i+1})'
+                   for i in range(1, c - len(channel_names))])
+            channel_names = list(channel_names) + unnamed
+    else:
+        raise ValueError('`channel_name` must be list or tuple of str')
+
+    lsid_base = 'urn:lsid:ome.xsd:'
 
     channel_info = ''
     for i, name in enumerate(channel_names[:c]):
         channel_info += f'''\
-    <ChannelInfo Name="{name}" ID="{lsid_base}ChannelInfo:{i + 3}">
+    <ChannelInfo Name="{name}" ID="{lsid_base}LogicalChannel:{i + 3}">
       <ChannelComponent Index="{i}" Pixels="{lsid_base}Pixels:2"/>
     </ChannelInfo>
 '''
@@ -394,10 +540,3 @@ def save_ome_tiff(filename, image):
         data=image,
         description=description,
         metadata=None)
-
-
-def save_tiff(filename, image, format):
-    {
-        'imagej': save_imagej_hyperstack,
-        'ome': save_ome_tiff
-    }[format](filename, image)

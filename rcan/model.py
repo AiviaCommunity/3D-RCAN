@@ -3,6 +3,10 @@
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
 import keras
+import numpy as np
+
+from keras.utils.conv_utils import normalize_tuple
+from .layers import _PixelShuffle
 
 
 def _get_spatial_ndim(x):
@@ -21,6 +25,23 @@ def _conv(x, num_filters, kernel_size, padding='same', **kwargs):
     return (keras.layers.Conv2D if n == 2 else
             keras.layers.Conv3D)(
         num_filters, kernel_size, padding=padding, **kwargs)(x)
+
+
+def _subpixel_conv(x, upscale_factor, **kwargs):
+    rank = _get_spatial_ndim(x)
+    num_channels = _get_num_channels(x)
+
+    f = normalize_tuple(upscale_factor, rank, 'upscale_factor')
+
+    if len(set(f)) == 1 and (f[0] & (f[0] - 1)) == 0:
+        for _ in range(int(np.log2(f[0]))):
+            x = _conv(x, num_channels * 2 ** rank, 3)
+            x = _PixelShuffle(rank, 2)(x)
+    else:
+        x = _conv(x, num_channels * np.prod(f), 3, **kwargs)
+        x = _PixelShuffle(rank, upscale_factor)(x)
+
+    return x
 
 
 def _global_average_pooling(x):
@@ -103,6 +124,7 @@ def build_rcan(input_shape=(16, 256, 256, 1),
                num_residual_groups=5,
                channel_reduction=8,
                residual_scaling=1.0,
+               upscale_factor=None,
                num_output_channels=-1):
     '''
     Builds a residual channel attention network. Note that the upscale module
@@ -124,6 +146,8 @@ def build_rcan(input_shape=(16, 256, 256, 1),
     residual_scaling: float
         Scaling factor applied to the residual component in the residual
         channel attention block.
+    upscale_factor: int or tuple of int or None
+        If not `None`, model's output is upscaled by the given factor.
     num_output_channels: int
         Number of channels in the output image. if negative, it is set to the
         same number as the input.
@@ -166,6 +190,9 @@ def build_rcan(input_shape=(16, 256, 256, 1),
 
     x = _conv(x, num_channels, 3)
     x = keras.layers.Add()([x, long_skip])
+
+    if upscale_factor is not None:
+        x = _subpixel_conv(x, upscale_factor)
 
     x = _conv(x, num_output_channels, 3)
     outputs = _destandardize(x)

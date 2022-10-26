@@ -1,68 +1,22 @@
 # Copyright 2021 SVision Technologies LLC.
+# Copyright 2021-2022 Leica Microsystems, Inc.
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
 import fractions
 import h5py
 import itertools
-import json
-import keras
 import numexpr
 import numpy as np
 import pathlib
 import re
+import tensorflow as tf
 import tifffile
 import tqdm
 import tqdm.utils
 
-from . import layers  # noqa: F401
-from tensorflow.python.client.device_lib import list_local_devices
-
-
-def get_gpu_count():
-    '''Returns the number of available GPUs.'''
-    return len([x for x in list_local_devices() if x.device_type == 'GPU'])
-
-
-def is_multi_gpu_model(model):
-    '''Checks if the model supports multi-GPU data parallelism.'''
-    return hasattr(model, 'is_multi_gpu_model') and model.is_multi_gpu_model
-
-
-def convert_to_multi_gpu_model(model, gpus=None):
-    '''
-    Converts a model into a multi-GPU version if possible.
-
-    Parameters
-    ----------
-    model: keras.Model
-        Model to be converted.
-    gpus: int or None
-        Number of GPUs used to create model replicas. If None, all GPUs
-        available on the device will be used.
-
-    Returns
-    -------
-    keras.Model
-        Multi-GPU model.
-    '''
-
-    gpus = gpus or get_gpu_count()
-
-    if gpus <= 1 or is_multi_gpu_model(model):
-        return model
-
-    multi_gpu_model = keras.utils.multi_gpu_model(
-        model, gpus=gpus, cpu_relocation=True)
-
-    # copy weights
-    multi_gpu_model.layers[
-        -(len(multi_gpu_model.outputs) + 1)].set_weights(model.get_weights())
-
-    setattr(multi_gpu_model, 'is_multi_gpu_model', True)
-    setattr(multi_gpu_model, 'gpus', gpus)
-
-    return multi_gpu_model
+from keras.saving import hdf5_format
+from keras.saving.saved_model import json_utils
 
 
 def normalize(image, p_min=2, p_max=99.9, dtype='float32'):
@@ -77,6 +31,10 @@ def normalize(image, p_min=2, p_max=99.9, dtype='float32'):
     https://doi.org/10.1038/s41592-018-0216-7
     '''
     low, high = np.percentile(image, (p_min, p_max))
+
+    if low == high:
+        return image
+
     return numexpr.evaluate(
         '(image - low) / (high - low + 1e-6)').astype(dtype)
 
@@ -95,18 +53,6 @@ def staircase_exponential_decay(n):
     every `n` epochs.
     '''
     return lambda epoch, lr: lr / 2 if epoch != 0 and epoch % n == 0 else lr
-
-
-def save_model(filename, model, weights_only=False):
-    if is_multi_gpu_model(model):
-        m = model.layers[-(len(model.outputs) + 1)]
-    else:
-        m = model
-
-    if weights_only:
-        m.save_weights(filename, overwrite=True)
-    else:
-        m.save(filename, overwrite=True)
 
 
 def get_model_path(directory, model_type='best'):
@@ -163,8 +109,7 @@ def load_model(filename, input_shape=None):
     '''
 
     with h5py.File(filename, mode='r') as f:
-        model_config = f.attrs.get('model_config')
-        model_config = json.loads(model_config.decode('utf-8'))
+        model_config = json_utils.decode(f.attrs.get('model_config'))
 
         # overwrite model's input shape
         if input_shape is not None:
@@ -177,71 +122,17 @@ def load_model(filename, input_shape=None):
                             f'Received input shape: {input_shape}')
                     shape[1:-1] = input_shape
 
-        model = keras.models.model_from_config(model_config)
-        model.load_weights(filename)
+        model = tf.keras.models.model_from_config(model_config)
+        hdf5_format.load_weights_from_hdf5_group(f['model_weights'], model)
+
         return model
-
-
-def load_image(filename, ndim, data_format, p_min=2, p_max=99.9):
-    '''
-    Loads a tiff image from a file.
-
-    Parameters
-    ----------
-    filename: str
-        Name of the file.
-    ndim: int
-        Number of image dimensions.
-    data_format: str or None
-        The ordering of the dimensions in the image.
-    p_min, p_max: float
-        Normalization parameters.
-    '''
-
-    def get_default_format(ndim, channel_axis):
-        fmt = 'YX' if ndim == 2 else 'ZYX'
-
-        if channel_axis is True or channel_axis == 'first':
-            fmt = 'C' + fmt
-        elif channel_axis == 'last':
-            fmt = fmt + 'C'
-
-        return fmt
-
-    if ndim not in (2, 3):
-        raise ValueError(f'{ndim}D image is not supported')
-
-    image = tifffile.imread(filename).astype('float32')
-
-    if image.ndim not in (ndim, ndim + 1):
-        raise ValueError(f'Input array must be {ndim}D or {ndim + 1}D')
-
-    has_channel_axis = image.ndim == ndim + 1
-
-    if not data_format:
-        src = get_default_format(ndim, has_channel_axis)
-    else:
-        src = data_format.upper()
-        if sorted(src) != sorted(get_default_format(ndim, has_channel_axis)):
-            raise ValueError('Invalid data format:', data_format)
-
-    image = tifffile.transpose_axes(
-        image,
-        src,
-        get_default_format(ndim, 'last'))
-
-    for c in range(image.shape[-1]):
-        image[..., c] = normalize(image[..., c], p_min, p_max)
-
-    return image
 
 
 def apply(model, data, overlap_shape=None, verbose=False):
     '''
     Applies a model to an input image. The input image stack is split into
     sub-blocks with model's input size, then the model is applied block by
-    block. The sizes of input and output images are assumed to be the same
-    while they can have different numbers of channels.
+    block.
 
     Parameters
     ----------
@@ -320,7 +211,7 @@ def apply(model, data, overlap_shape=None, verbose=False):
         'linear_ramp'
     )[(slice(1, -1),) * image_dim]
 
-    batch_size = model.gpus if is_multi_gpu_model(model) else 1
+    batch_size = model.distribute_strategy.num_replicas_in_sync
     batch = np.zeros(
         (batch_size, *model_input_image_shape, num_input_channels),
         dtype=np.float32)
@@ -334,6 +225,10 @@ def apply(model, data, overlap_shape=None, verbose=False):
     result = []
 
     for image in data:
+        # add the channel dimension if necessary
+        if image.ndim == image_dim:
+            image = image[..., np.newaxis]
+
         if (image.ndim != image_dim + 1
                 or image.shape[-1] != num_input_channels):
             raise ValueError(f'Input image must be {image_dim}D with '
@@ -348,8 +243,7 @@ def apply(model, data, overlap_shape=None, verbose=False):
         sum_weight = np.zeros(output_image_shape, dtype=np.float32)
 
         num_steps = tuple(
-            i // s + (i % s != 0)
-            for i, s in zip(input_image_shape, step_shape))
+            (i + s - 1) // s for i, s in zip(input_image_shape, step_shape))
 
         # top-left corner of each block
         blocks = list(itertools.product(
@@ -390,134 +284,40 @@ def apply(model, data, overlap_shape=None, verbose=False):
         for channel in range(num_output_channels):
             applied[..., channel] /= sum_weight
 
+        if applied.shape[-1] == 1:
+            applied = applied[..., 0]
+
         result.append(applied)
 
     return result if input_is_list else result[0]
 
 
-def save_imagej_hyperstack(filename, image, data_format=None):
-    '''
-    Saves an image as ImageJ Hyperstack.
+def save_imagej_hyperstack(filename, image):
+    assert image.ndim in [3, 4]
+    if image.ndim == 4:
+        image = np.transpose(image, (1, 0, 2, 3))
 
-    Parameters
-    ----------
-    filename: str
-        Name of the file.
-    image: array_like
-        Image to be saved.
-    data_format: str or None
-        The ordering of the dimensions in the image. If not specified,
-        one of following default values will be used according to the
-        dimensionality of the input image:
-        - 2D: `YX`
-        - 3D: `ZYX`
-        - 4D: `CZYX`
-        - 5D: `TCZYX`
-        - 6D: `STCZYX`
-    '''
-
-    if not 2 <= image.ndim <= 6:
-        raise ValueError(
-            'Image dimension must be between 2 and 6; '
-            f'Received image shape: {image.shape}')
-
-    if data_format is None:
-        data_format = 'STCZYX'[-image.ndim:]
-
-    data_format = data_format.upper()
-
-    if len(data_format) != image.ndim:
-        raise ValueError(
-            f'Length of `data_format` must be {image.ndim}; '
-            f'Received data format: {data_format}')
-
-    if (len(set(data_format)) != len(data_format)
-            or not all(s in data_format for s in 'XY')
-            or not all(s in 'TZCYXS' for s in data_format)):
-        raise ValueError(f'Invalid data format: {data_format}')
-
-    tifffile.imwrite(
-        str(filename),
-        tifffile.transpose_axes(image, data_format, 'TZCYXS'),
-        imagej=True)
+    tifffile.imwrite(str(filename), image, imagej=True)
 
 
-def save_ome_tiff(filename,
-                  image,
-                  channel_names=None,
-                  data_format=None):
-    '''
-    Saves an image as OME-TIFF.
-
-    Parameters
-    ----------
-    filename: str
-        Name of the file.
-    image: array_like
-        Image to be saved.
-    channel_names: None or list of str
-        Channel names.
-    data_format: str or None
-        The ordering of the dimensions in the image. If not specified,
-        one of following default values will be used according to the
-        dimensionality of the input image:
-        - 2D: `YX`
-        - 3D: `ZYX`
-        - 4D: `CZYX`
-        - 5D: `TCZYX`
-    '''
-
-    if not 2 <= image.ndim <= 5:
-        raise ValueError(
-            'Image dimension must be between 2 and 5; '
-            f'Received image shape: {image.shape}')
-
-    if data_format is None:
-        data_format = 'TCZYX'[-image.ndim:]
-
-    data_format = data_format.upper()
-
-    if len(data_format) != image.ndim:
-        raise ValueError(
-            f'Length of `data_format` must be {image.ndim}; '
-            f'Received data format: {data_format}')
-
-    if (len(set(data_format)) != len(data_format)
-            or not all(s in data_format for s in 'XY')
-            or not all(s in 'CTZYX' for s in data_format)):
-        raise ValueError(f'Invalid data format: {data_format}')
-
-    image = tifffile.transpose_axes(image, data_format, 'CTZYX')
+def save_ome_tiff(filename, image):
+    assert image.ndim in [3, 4]
+    image = np.expand_dims(image, (1, 2) if image.ndim == 3 else 1)
     c, t, z, y, x = image.shape
 
-    if image.dtype == np.uint8:
-        pixel_type = 'Uint8'
-    elif image.dtype == np.uint16:
-        pixel_type = 'Uint16'
-    elif image.dtype == np.float32:
-        pixel_type = 'Float'
-    else:
-        raise ValueError(f'Unsupported data type: {image.dtype}')
+    pixel_type = {
+        np.dtype('uint8'): 'Uint8',
+        np.dtype('uint16'): 'Uint16',
+        np.dtype('float32'): 'Float'
+    }[image.dtype]
 
-    if channel_names is None:
-        channel_names = []
-
-    if isinstance(channel_names, (list, tuple)):
-        if len(channel_names) < c:
-            unnamed = (
-                ['Unnamed']
-                + [f'Unnamed ({i+1})'
-                   for i in range(1, c - len(channel_names))])
-            channel_names = list(channel_names) + unnamed
-    else:
-        raise ValueError('`channel_name` must be list or tuple of str')
-
+    channel_names = ['Raw', 'Restored', 'Ground Truth']
     lsid_base = 'urn:lsid:ome.xsd:'
 
     channel_info = ''
     for i, name in enumerate(channel_names[:c]):
         channel_info += f'''\
-    <ChannelInfo Name="{name}" ID="{lsid_base}LogicalChannel:{i + 3}">
+    <ChannelInfo Name="{name}" ID="{lsid_base}ChannelInfo:{i + 3}">
       <ChannelComponent Index="{i}" Pixels="{lsid_base}Pixels:2"/>
     </ChannelInfo>
 '''
@@ -540,3 +340,10 @@ def save_ome_tiff(filename,
         data=image,
         description=description,
         metadata=None)
+
+
+def save_tiff(filename, image, format):
+    {
+        'imagej': save_imagej_hyperstack,
+        'ome': save_ome_tiff
+    }[format](filename, image)

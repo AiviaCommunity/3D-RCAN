@@ -1,16 +1,18 @@
 # Copyright 2021 SVision Technologies LLC.
+# Copyright 2021-2022 Leica Microsystems, Inc.
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
-import keras
-from keras.utils.conv_utils import normalize_tuple
 import numpy as np
+import tensorflow as tf
 import warnings
+
+from tensorflow.python.keras.utils.conv_utils import normalize_tuple
 
 
 class DataGenerator:
     '''
-    Generates batches of image pairs with real-time data augmentation.
+    Generates batches of images with real-time data augmentation.
 
     Parameters
     ----------
@@ -46,17 +48,22 @@ class DataGenerator:
         def rotate_and_flip(x, y, dim):
             if dim == 2:
                 k = np.random.randint(0, 4)
-                x, y = [np.rot90(v, k=k) for v in (x, y)]
+                x, y = [None if v is None else np.rot90(v, k=k)
+                        for v in (x, y)]
                 if np.random.random() < 0.5:
-                    x, y = [np.fliplr(v) for v in (x, y)]
+                    x, y = [None if v is None else np.fliplr(v)
+                            for v in (x, y)]
                 return x, y
             elif dim == 3:
                 k = np.random.randint(0, 4)
-                x, y = [np.rot90(v, k=k, axes=(1, 2)) for v in (x, y)]
+                x, y = [None if v is None else np.rot90(v, k=k, axes=(1, 2))
+                        for v in (x, y)]
                 if np.random.random() < 0.5:
-                    x, y = [np.flip(v, axis=1) for v in (x, y)]
+                    x, y = [None if v is None else np.flip(v, axis=1)
+                            for v in (x, y)]
                 if np.random.random() < 0.5:
-                    x, y = [np.flip(v, axis=0) for v in (x, y)]
+                    x, y = [None if v is None else np.flip(v, axis=0)
+                            for v in (x, y)]
                 return x, y
             else:
                 raise ValueError('Unsupported dimension')
@@ -89,7 +96,7 @@ class DataGenerator:
         if any(not isinstance(f, int) or f == 0 for f in self._scale_factor):
             raise ValueError('"scale_factor" must be nonzero integer')
 
-    class _Sequence(keras.utils.Sequence):
+    class _Generator:
         def _scale(self, shape):
             return tuple(
                 s * f if f > 0 else s // -f
@@ -98,13 +105,11 @@ class DataGenerator:
         def __init__(self,
                      x,
                      y,
-                     batch_size,
                      shape,
                      transform_function,
                      intensity_threshold,
                      area_threshold,
                      scale_factor):
-            self._batch_size = batch_size
             self._transform_function = transform_function
             self._intensity_threshold = intensity_threshold
             self._area_threshold = area_threshold
@@ -122,114 +127,139 @@ class DataGenerator:
                 list(m) if isinstance(m, (list, tuple)) else [m]
                 for m in [x, y]]
 
-            if len(self._x) != len(self._y):
+            if self._y is not None and len(self._x) != len(self._y):
                 raise ValueError(
                     'Different number of images are given: '
                     f'{len(self._x)} vs. {len(self._y)}')
 
             if len({m.dtype for m in self._x}) != 1:
                 raise ValueError('All source images must be the same type')
-            if len({m.dtype for m in self._y}) != 1:
+
+            if self._y is not None and len({m.dtype for m in self._y}) != 1:
                 raise ValueError('All target images must be the same type')
 
             for i in range(len(self._x)):
                 if len(self._x[i].shape) == len(shape):
                     self._x[i] = self._x[i][..., np.newaxis]
 
-                if len(self._y[i].shape) == len(shape):
-                    self._y[i] = self._y[i][..., np.newaxis]
-
                 if len(self._x[i].shape) != len(shape) + 1:
                     raise ValueError(f'Source image must be {len(shape)}D')
-
-                if len(self._y[i].shape) != len(shape) + 1:
-                    raise ValueError(f'Target image must be {len(shape)}D')
 
                 if self._x[i].shape[:-1] < shape:
                     raise ValueError(
                         'Source image must be larger than the patch size')
 
-                expected_y_image_size = self._scale(self._x[i].shape[:-1])
-                if self._y[i].shape[:-1] != expected_y_image_size:
-                    raise ValueError('Invalid target image size: '
-                                     f'expected {expected_y_image_size}, '
-                                     f'but received {self._y[i].shape[:-1]}')
+                if self._y is not None:
+                    if len(self._y[i].shape) == len(shape):
+                        self._y[i] = self._y[i][..., np.newaxis]
+
+                    if len(self._y[i].shape) != len(shape) + 1:
+                        raise ValueError(f'Target image must be {len(shape)}D')
+
+                    expected_y_image_size = self._scale(self._x[i].shape[:-1])
+                    if self._y[i].shape[:-1] != expected_y_image_size:
+                        raise ValueError(
+                            'Invalid target image size: '
+                            f'expected {expected_y_image_size}, '
+                            f'but received {self._y[i].shape[:-1]}')
 
             if len({m.shape[-1] for m in self._x}) != 1:
                 raise ValueError(
                     'All source images must have the same number of channels')
-            if len({m.shape[-1] for m in self._y}) != 1:
+
+            if (self._y is not None
+                    and len({m.shape[-1] for m in self._y}) != 1):
                 raise ValueError(
                     'All target images must have the same number of channels')
 
-            self._batch_x = np.zeros(
-                (batch_size, *shape, self._x[0].shape[-1]),
-                dtype=self._x[0].dtype)
-            self._batch_y = np.zeros(
-                (batch_size, *self._scale(shape), self._y[0].shape[-1]),
-                dtype=self._y[0].dtype)
+            output_signature_x = tf.TensorSpec(
+                (*shape, self._x[0].shape[-1]), self._x[0].dtype)
 
-        def __len__(self):
-            return 1  # return a dummy value
+            if self._y is None:
+                self.output_signature = (output_signature_x,)
+            else:
+                self.output_signature = (
+                    output_signature_x,
+                    tf.TensorSpec(
+                        (*self._scale(shape), self._y[0].shape[-1]),
+                        self._y[0].dtype))
 
-        def __next__(self):
-            return self.__getitem__(0)
-
-        def __getitem__(self, _):
-            for i in range(self._batch_size):
+        def __iter__(self):
+            while True:
                 for _ in range(512):
-                    j = np.random.randint(0, len(self._x))
+                    i = np.random.randint(0, len(self._x))
 
-                    tl = [np.random.randint(0, a - b + 1)
-                          for a, b in zip(
-                              self._x[j].shape, self._batch_x.shape[1:])]
-                    x = np.copy(self._x[j][tuple(
-                        [slice(a, a + b) for a, b in zip(
-                            tl, self._batch_x.shape[1:])])])
+                    tl = [
+                        np.random.randint(0, a - b + 1)
+                        for a, b in zip(
+                            self._x[i].shape, self.output_signature[0].shape)]
 
-                    y = np.copy(self._y[j][tuple(
-                        [slice(a, a + b) for a, b in zip(
-                            self._scale(tl), self._batch_y.shape[1:])])])
+                    patch_x_roi = tuple(
+                        slice(a, a + b)
+                        for a, b in zip(tl, self.output_signature[0].shape))
+                    patch_x = np.copy(self._x[i][patch_x_roi])
 
-                    if (self._intensity_threshold <= 0.0 or
-                            np.count_nonzero(y > self._intensity_threshold)
-                            >= self._area_threshold):
-                        break
+                    if self._y is not None:
+                        patch_y_roi = tuple(
+                            slice(a, a + b) for a, b in
+                            zip(self._scale(tl),
+                                self.output_signature[1].shape))
+                        patch_y = np.copy(self._y[i][patch_y_roi])
+
+                    if self._intensity_threshold > 0:
+                        foreground_area = np.count_nonzero(
+                            (patch_x if self._y is None else patch_y)
+                            > self._intensity_threshold)
+                        if foreground_area < self._area_threshold:
+                            continue
+
+                    break
+
                 else:
                     warnings.warn(
                         'Failed to sample a valid patch',
                         RuntimeWarning,
                         stacklevel=3)
 
-                self._batch_x[i], self._batch_y[i] = \
-                    self._transform_function(x, y)
+                if self._y is None:
+                    yield self._transform_function(patch_x, None)[0]
+                else:
+                    yield self._transform_function(patch_x, patch_y)
 
-            return self._batch_x, self._batch_y
-
-    def flow(self, x, y):
+    def flow(self, x, y=None, /):
         '''
-        Returns a `keras.utils.Sequence` object which generates batches
-        infinitely. It can be used as an input generator for
-        `keras.models.Model.fit_generator()`.
+        Returns a `tf.data.Dataset` object which generates batches
+        infinitely.
 
         Parameters
         ----------
         x: array_like or list of array_like
             Source image(s).
-        y: array_like or list of array_like
+        y: array_like or list of array_like or None
             Target image(s).
 
         Returns
         -------
-        keras.utils.Sequence
-            `keras.utils.Sequence` object which generates tuples of source and
-            target image patches.
+        tf.data.Dataset
+            `tf.data.Dataset` yielding image patches.
         '''
-        return self._Sequence(x,
-                              y,
-                              self._batch_size,
-                              self._shape,
-                              self._transform_function,
-                              self._intensity_threshold,
-                              self._area_threshold,
-                              self._scale_factor)
+        gen = self._Generator(
+            x,
+            y,
+            self._shape,
+            self._transform_function,
+            self._intensity_threshold,
+            self._area_threshold,
+            self._scale_factor)
+
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.DATA)
+
+        return (
+            tf.data.Dataset
+            .from_generator(lambda: gen, output_signature=gen.output_signature)
+            .with_options(options)
+            .batch(self._batch_size)
+            .repeat()
+            .prefetch(tf.data.AUTOTUNE))

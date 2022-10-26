@@ -13,25 +13,25 @@
 ## System Requirements
 
 - Windows 10. Linux and Mac OS should be able to run the code but the code has been only tested on Windows 10 so far.
-- Python 3.6+
+- Python 3.9
 - NVIDIA GPU
-- CUDA 10.0 and cuDNN 7.6.5
+- CUDA 11.2 and cuDNN 8.1.0
 
 Tested Environment:
 
 1. Smaller RCAN (for less capable GPUs):
     - RCAN Configuration: [config.json](./config.json)
     - Windows 10
-    - Python 3.7
+    - Python 3.9.5
     - NVIDIA GTX 1060 6GB
-    - CUDA 10.0 and cuDNN 7.6.5
+    - CUDA 11.2 and cuDNN 8.1.0
 
 2. Larger RCAN (for better results):
     - RCAN Configuration: [config_large.json](./config_large.json)
     - Windows 10
-    - Python 3.7
-    - NVIDIA Tesla P100 16 GB
-    - CUDA 10.0 and cuDNN 7.6.5
+    - Python 3.9.7
+    - NVIDIA RTX A6000 48GB
+    - CUDA 11.2 and cuDNN 8.1.0
 
 ## Dataset
 
@@ -166,18 +166,6 @@ Following optional variables can be also set in the JSON file (if not set, defau
         ]
     ```
 
-- `raw_data_format` (string)
-
-  - The ordering of the dimensions in the raw image
-
-  - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
-
-- `gt_data_format` (string)
-
-  - The ordering of the dimensions in the GT image
-
-  - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
-
 - `epochs` (integer)
 
   - Number of epochs to train the model
@@ -308,16 +296,6 @@ The loss values are saved in the training output folder. You can use TensorBoard
 tensorboard --host=127.0.0.1 --logdir=/path/to/training/dir
 ```
 
-### Multi-channel Training
-
-If the Raw (input) contains more than one channels, all channel images are used as inputs for the RCAN model training. However, the GT (output) can only have one channel.
-
-### Super-resolution Training
-
-If the resolution of the GT (output) is higher than the resolution of Raw (input), a subpixel convolution layer is added as the last layer to generate up-sampled super-resolution outputs. The subpixel convolution layer is a combination of standard convolution and pixel shuffle for up-sampling.
-
-
-
 
 
 ## Model Apply
@@ -416,26 +394,6 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
             -g ./GT
             ```
 
-- `-d` or `--input_data_format` (string)
-
-    - The ordering of the dimensions in the input raw image
-
-        - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
-
-        ```posh
-        -d ZCYX
-        ```
-
-- `-D` or `--ground_truth_data_format` (string)
-
-    - The ordering of the dimensions in the GT image
-
-        - Default: `ZYX` and `CZYX` for single- and multi-channel images, respectively
-
-        ```posh
-        -D ZCYX
-        ```
-
 - `-b` or `--bpp` (int)
 
     - Bit depth of the output image
@@ -472,15 +430,15 @@ python apply.py -m model_dir -i input_dir -g ground_truth_dir -o output_dir
 
 -  `--normalize_output_range_between_zero_and_one`
 
-    - To normalize the output intensity range to [0, 1]
+  - To normalize the output intensity range to [0, 1]
 
-      - Minimum intensity is mapped to 0
+    - Minimum intensity is mapped to 0
 
-      - Maximum intensity is mapped to 1
+    - Maximum intensity is mapped to 1
 
-        ```
-        --normalize_output_range_between_zero_and_one
-        ```
+      ```
+      --normalize_output_range_between_zero_and_one
+      ```
 
   - Combine with --bpp, for example to normalized to 16-bit  [0, 65535]
 
@@ -523,5 +481,6 @@ ECCV 2018
 ## License
 
 Copyright © 2021 [SVision Technologies LLC.](https://www.aivia-software.com/)
+Copyright © 2021-2022 Leica Microsystems, Inc.
 
 Released under Creative Commons Attribution-NonCommercial 4.0 International Public License ([CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/))

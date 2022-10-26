@@ -1,7 +1,7 @@
 {
     "epochs": 300,
     "steps_per_epoch": 256,
-    "num_residual_groups": 3,
+    "num_residual_groups": 2,
     "training_data_dir": {"raw":"/path/to/training/Raw/",
                           "gt":"/path/to/training/GT/"},
     "training_image_pairs": [

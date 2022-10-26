@@ -1,10 +1,10 @@
 colorama; sys_platform=='win32'
-h5py<3.0
+h5py
 jsonschema
-keras==2.2.4
+keras
 numexpr
-numpy>=1.18,!=1.19.4
-scipy
-tensorflow_gpu==1.13.1
+numpy
+tensorflow==2.10.0
+tensorflow-probability
 tifffile
-tqdm>=4.41.0
+tqdm

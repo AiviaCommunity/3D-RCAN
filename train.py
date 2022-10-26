@@ -1,24 +1,22 @@
 # Copyright 2021 SVision Technologies LLC.
+# Copyright 2021-2022 Leica Microsystems, Inc.
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
-from rcan.callbacks import ModelCheckpoint, TqdmCallback
-from rcan.data_generator import DataGenerator
-from rcan.losses import mae, mse
-from rcan.metrics import psnr, ssim
-from rcan.model import build_rcan
-from rcan.utils import (
-    convert_to_multi_gpu_model,
-    get_gpu_count,
-    load_image,
-    staircase_exponential_decay)
-
 import argparse
+import itertools
 import json
 import jsonschema
-import keras
 import numpy as np
 import pathlib
+import tensorflow as tf
+import tifffile
+
+from rcan.callbacks import TqdmCallback
+from rcan.data_generator import DataGenerator
+from rcan.metrics import psnr, ssim
+from rcan.model import build_rcan
+from rcan.utils import normalize, staircase_exponential_decay
 
 
 def load_data(config, data_type):
@@ -49,47 +47,22 @@ def load_data(config, data_type):
     print(f'Loading {data_type} data')
 
     data = []
-    for filename in image_pair_list:
-        raw, gt = [
-            load_image(
-                filename[t],
-                len(config['input_shape']),
-                config[t + '_data_format'])
-            for t in ['raw', 'gt']]
+    for p in image_pair_list:
+        raw_file, gt_file = [p[t] for t in ['raw', 'gt']]
 
-        print(f'  - raw: path={filename["raw"]}, shape={raw.shape}')
-        print(f'     gt: path={filename["gt"]}, shape={gt.shape}')
+        print('  - raw:', raw_file)
+        print('    gt:', gt_file)
 
-        data.append([raw, gt])
+        raw, gt = [tifffile.imread(p[t]) for t in ['raw', 'gt']]
+
+        if raw.shape != gt.shape:
+            raise ValueError(
+                'Raw and GT images must be the same size: '
+                f'{p["raw"]} {raw.shape} vs. {p["gt"]} {gt.shape}')
+
+        data.append([normalize(m) for m in [raw, gt]])
 
     return data
-
-
-def get_upscale_factor(data):
-    raw_shape = data[0][0].shape
-    gt_shape = data[0][1].shape
-
-    if raw_shape[:-1] == gt_shape[:-1]:
-        for raw, gt in data:
-            if raw.shape[:-1] != gt.shape[:-1]:
-                raise ValueError(
-                    'The upscale factor must be the same for all image pairs')
-        return None
-
-    if any(g % r != 0 for r, g in zip(raw_shape[:-1], gt_shape[:-1])):
-        raise ValueError(
-            'The upscale factor must be integer for all dimensions')
-
-    upscale_factor = tuple(
-        g // r for r, g in zip(raw_shape[:-1], gt_shape[:-1]))
-
-    for raw, gt in data:
-        if any(r * s != g for r, g, s in
-               zip(raw.shape[:-1], gt.shape[:-1], upscale_factor)):
-            raise ValueError(
-                'The upscale factor must be the same for all image pairs')
-
-    return upscale_factor
 
 
 parser = argparse.ArgumentParser()
@@ -110,8 +83,6 @@ schema = {
             'minItems': 2,
             'maxItems': 3
         },
-        'raw_data_format': {'type': 'string'},
-        'gt_data_format': {'type': 'string'},
         'num_channels': {'type': 'integer', 'minimum': 1},
         'num_residual_blocks': {'type': 'integer', 'minimum': 1},
         'num_residual_groups': {'type': 'integer', 'minimum': 1},
@@ -153,8 +124,6 @@ with open(args.config) as f:
     config = json.load(f)
 
 jsonschema.validate(config, schema)
-config.setdefault('raw_data_format', None)
-config.setdefault('gt_data_format', None)
 config.setdefault('epochs', 300)
 config.setdefault('steps_per_epoch', 256)
 config.setdefault('num_channels', 32)
@@ -168,68 +137,60 @@ config.setdefault('initial_learning_rate', 1e-4)
 config.setdefault('loss', 'mae')
 config.setdefault('metrics', ['psnr'])
 
-if 'input_shape' in config:
-    if len(config['input_shape']) not in (2, 3):
-        raise ValueError(
-            '`input_shape` must be a 2D or 3D array; '
-            f'received: {config["input_shape"]}')
-else:
-    config['input_shape'] = (16, 256, 256)
-
 training_data = load_data(config, 'training')
 validation_data = load_data(config, 'validation')
 
-upscale_factor = get_upscale_factor(training_data + (validation_data or []))
-num_input_channels = training_data[0][0].shape[-1]
-num_output_channels = training_data[0][1].shape[-1]
+ndim = training_data[0][0].ndim
 
-for raw, gt in training_data + (validation_data or []):
-    if raw.shape[-1] != num_input_channels:
+for p in itertools.chain(training_data, validation_data or []):
+    if p[0].ndim != ndim:
+        raise ValueError('All images must have the same number of dimensions')
+
+if 'input_shape' in config:
+    input_shape = config['input_shape']
+    if len(input_shape) != ndim:
         raise ValueError(
-            f'All raw images must have {num_input_channels} channel(s)')
+            f'`input_shape` must be a {ndim}D array; received: {input_shape}')
+else:
+    input_shape = (16, 256, 256) if ndim == 3 else (256, 256)
 
-    if gt.shape[-1] != num_output_channels:
-        raise ValueError(
-            f'All GT images must have {num_output_channels} channel(s)')
-
-    config['input_shape'] = np.minimum(config['input_shape'], raw.shape[:-1])
+for p in itertools.chain(training_data, validation_data or []):
+    input_shape = np.minimum(input_shape, p[0].shape)
 
 print('Building RCAN model')
-print(f'  - input_shape =', (*config['input_shape'], num_input_channels))
+print('  - input_shape =', input_shape)
 for s in ['num_channels',
           'num_residual_blocks',
           'num_residual_groups',
           'channel_reduction']:
     print(f'  - {s} =', config[s])
-if upscale_factor is not None:
-    print(f'  - upscale_factor =', upscale_factor)
-print(f'  - num_output_channels =', num_output_channels)
 
-model = build_rcan(
-    (*config['input_shape'], num_input_channels),
-    num_channels=config['num_channels'],
-    num_residual_blocks=config['num_residual_blocks'],
-    num_residual_groups=config['num_residual_groups'],
-    channel_reduction=config['channel_reduction'],
-    upscale_factor=upscale_factor,
-    num_output_channels=num_output_channels)
+strategy = tf.distribute.MirroredStrategy(
+    cross_device_ops=tf.distribute.ReductionToOneDevice())
+gpus = strategy.num_replicas_in_sync
 
-gpus = get_gpu_count()
-model = convert_to_multi_gpu_model(model, gpus)
+with strategy.scope():
+    model = build_rcan(
+        (*input_shape, 1),
+        num_channels=config['num_channels'],
+        num_residual_blocks=config['num_residual_blocks'],
+        num_residual_groups=config['num_residual_groups'],
+        channel_reduction=config['channel_reduction'])
 
-model.compile(
-    optimizer=keras.optimizers.Adam(lr=config['initial_learning_rate']),
-    loss={'mae': mae, 'mse': mse}[config['loss']],
-    metrics=[{'psnr': psnr, 'ssim': ssim}[m] for m in config['metrics']])
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(
+            learning_rate=config['initial_learning_rate']),
+        loss={'mae': tf.keras.losses.MeanAbsoluteError(),
+              'mse': tf.keras.losses.MeanSquaredError()}[config['loss']],
+        metrics=[{'psnr': psnr, 'ssim': ssim}[m] for m in config['metrics']])
 
 data_gen = DataGenerator(
-    config['input_shape'],
+    input_shape,
     gpus,
     transform_function=(
         'rotate_and_flip' if config['data_augmentation'] else None),
     intensity_threshold=config['intensity_threshold'],
-    area_ratio_threshold=config['area_ratio_threshold'],
-    scale_factor=1 if upscale_factor is None else upscale_factor)
+    area_ratio_threshold=config['area_ratio_threshold'])
 
 training_data = data_gen.flow(*list(zip(*training_data)))
 
@@ -246,7 +207,7 @@ output_dir = pathlib.Path(args.output_dir)
 output_dir.mkdir(parents=True, exist_ok=True)
 
 print('Training RCAN model')
-model.fit_generator(
+model.fit(
     training_data,
     epochs=config['epochs'],
     steps_per_epoch=steps_per_epoch,
@@ -254,13 +215,13 @@ model.fit_generator(
     validation_steps=validation_steps,
     verbose=0,
     callbacks=[
-        keras.callbacks.LearningRateScheduler(
+        tf.keras.callbacks.LearningRateScheduler(
             staircase_exponential_decay(config['epochs'] // 4)),
-        keras.callbacks.TensorBoard(
+        tf.keras.callbacks.TensorBoard(
             log_dir=str(output_dir),
             write_graph=False),
-        ModelCheckpoint(
-            str(output_dir / checkpoint_filepath),
+        tf.keras.callbacks.ModelCheckpoint(
+            output_dir / checkpoint_filepath,
             monitor='loss' if validation_data is None else 'val_loss',
             save_best_only=True),
         TqdmCallback()

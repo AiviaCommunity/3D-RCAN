@@ -1,14 +1,17 @@
 # Copyright 2021 SVision Technologies LLC.
+# Copyright 2021-2022 Leica Microsystems, Inc.
 # Creative Commons Attribution-NonCommercial 4.0 International Public License
 # (CC BY-NC 4.0) https://creativecommons.org/licenses/by-nc/4.0/
 
-import keras.backend as K
 import tensorflow as tf
+import tensorflow_probability as tfp
+
+K = tf.keras.backend
 
 
 def _get_gaussian_kernel(dim, size, sigma):
     k = size // 2
-    normal = tf.distributions.Normal(0.0, sigma)
+    normal = tfp.distributions.Normal(0.0, sigma)
     p = normal.prob(tf.range(-k, size - k, dtype=tf.float32))
 
     indices = [chr(i) for i in range(105, 105 + dim)]
@@ -22,7 +25,7 @@ def _get_gaussian_kernel(dim, size, sigma):
 
 def psnr(y_true, y_pred):
     '''
-    Computs the peak signal-to-noise ratio between two images. Note that the
+    Computes the peak signal-to-noise ratio between two images. Note that the
     maximum signal value is assumed to be 1.
     '''
     p, q = [K.batch_flatten(y) for y in [y_true, y_pred]]
@@ -36,8 +39,8 @@ def ssim(y_true, y_pred):
 
     References
     ----------
-    Image Quality Assessment: From Error Visibility to Structural Similarity
-    https://doi.org/10.1109/TIP.2003.819861
+    - Image quality assessment: from error visibility to structural similarity
+      https://doi.org/10.1109/TIP.2003.819861
     '''
 
     c1 = 0.01 ** 2
@@ -47,6 +50,8 @@ def ssim(y_true, y_pred):
     if dim not in (2, 3):
         raise NotImplementedError(f'{dim}D SSIM is not suported')
 
+    # Do not use K.int_shape(y_true) here because the shape of y_true may not
+    # be determined yet when compiling the model
     num_channels = K.int_shape(y_pred)[-1]
 
     kernel = _get_gaussian_kernel(dim, 11, 1.5)
